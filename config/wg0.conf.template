@@ -1,0 +1,11 @@
+[Interface]
+PrivateKey = <contents of /etc/wireguard/private.key>
+Address = 10.0.0.1/24
+ListenPort = 51820
+PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
+PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o wlan0 -j MASQUERADE
+
+# Add peers below as needed
+# [Peer]
+# PublicKey = <peer public key>
+# AllowedIPs = 10.0.0.2/32

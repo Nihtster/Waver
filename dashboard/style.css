@@ -1,0 +1,296 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    min-height: 100vh;
+}
+
+.hidden { display: none !important; }
+
+/* Login */
+.screen { min-height: 100vh; }
+
+#login-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0f1117;
+}
+
+.login-box {
+    background: #1a1d2e;
+    border: 1px solid #2d3748;
+    border-radius: 12px;
+    padding: 40px;
+    width: 360px;
+    text-align: center;
+}
+
+.login-box h1 {
+    font-size: 2rem;
+    margin-bottom: 8px;
+    color: #63b3ed;
+}
+
+.login-box p {
+    color: #718096;
+    margin-bottom: 24px;
+}
+
+.login-box input {
+    width: 100%;
+    padding: 12px 16px;
+    background: #0f1117;
+    border: 1px solid #2d3748;
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 1rem;
+    margin-bottom: 12px;
+}
+
+.login-box button {
+    width: 100%;
+    padding: 12px;
+    background: #3182ce;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.login-box button:hover { background: #2b6cb0; }
+
+.error { color: #fc8181; margin-top: 12px; }
+
+/* Header */
+header {
+    background: #1a1d2e;
+    border-bottom: 1px solid #2d3748;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+header h1 {
+    font-size: 1.4rem;
+    color: #63b3ed;
+    flex: 1;
+}
+
+#system-info {
+    display: flex;
+    gap: 16px;
+    font-size: 0.85rem;
+    color: #718096;
+}
+
+.logout-btn {
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid #2d3748;
+    border-radius: 8px;
+    color: #718096;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.logout-btn:hover {
+    border-color: #fc8181;
+    color: #fc8181;
+}
+
+/* Main */
+main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.card {
+    background: #1a1d2e;
+    border: 1px solid #2d3748;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.card h2 {
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #718096;
+    margin-bottom: 16px;
+}
+
+/* Services */
+.service-grid { display: flex; flex-direction: column; gap: 12px; }
+
+.service {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    background: #0f1117;
+    border-radius: 8px;
+    border: 1px solid #2d3748;
+}
+
+.service-name { font-weight: 500; }
+
+.service-status {
+    font-size: 0.8rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-left: 8px;
+}
+
+.status-on {
+    background: #22543d;
+    color: #9ae6b4;
+}
+
+.status-off {
+    background: #742a2a;
+    color: #feb2b2;
+}
+
+.toggle-btn {
+    padding: 6px 14px;
+    background: #2d3748;
+    border: none;
+    border-radius: 6px;
+    color: #e2e8f0;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.2s;
+}
+
+.toggle-btn:hover { background: #3182ce; }
+
+/* Stats */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.stat {
+    text-align: center;
+    padding: 12px;
+    background: #0f1117;
+    border-radius: 8px;
+}
+
+.stat-value {
+    display: block;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #63b3ed;
+}
+
+.stat-label {
+    display: block;
+    font-size: 0.75rem;
+    color: #718096;
+    margin-top: 4px;
+}
+
+.link-btn {
+    display: block;
+    text-align: center;
+    padding: 10px;
+    background: #2d3748;
+    border-radius: 8px;
+    color: #63b3ed;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+
+.link-btn:hover { background: #3182ce; color: white; }
+
+/* WiFi */
+.scan-btn {
+    width: 100%;
+    padding: 10px;
+    background: #2d3748;
+    border: none;
+    border-radius: 8px;
+    color: #e2e8f0;
+    cursor: pointer;
+    margin-bottom: 12px;
+    transition: background 0.2s;
+}
+
+.scan-btn:hover { background: #3182ce; }
+
+.wifi-network {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: #0f1117;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border: 1px solid #2d3748;
+}
+
+.wifi-network button {
+    padding: 4px 12px;
+    background: #2d3748;
+    border: none;
+    border-radius: 6px;
+    color: #e2e8f0;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.wifi-network button:hover { background: #3182ce; }
+
+#wifi-connect-form {
+    margin-top: 12px;
+    padding: 16px;
+    background: #0f1117;
+    border-radius: 8px;
+    border: 1px solid #2d3748;
+}
+
+#wifi-connect-form input {
+    width: 100%;
+    padding: 10px;
+    background: #1a1d2e;
+    border: 1px solid #2d3748;
+    border-radius: 6px;
+    color: #e2e8f0;
+    margin: 8px 0;
+}
+
+#wifi-connect-form button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-right: 8px;
+}
+
+#wifi-connect-form button:first-of-type {
+    background: #3182ce;
+    color: white;
+}
+
+.cancel-btn {
+    background: #2d3748 !important;
+    color: #e2e8f0 !important;
+}

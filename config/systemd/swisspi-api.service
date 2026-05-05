@@ -1,0 +1,14 @@
+[Unit]
+Description=SwissPI Flask API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/cimi/swisspi/api
+ExecStart=/home/cimi/swisspi-env/bin/gunicorn --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker --workers 1 --bind 127.0.0.1:5000 app:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
