@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/home/cimi/waver/launcher
-ExecStart=/home/cimi/swisspi-env/bin/python3 /home/cimi/waver/launcher/launcher.py
+ExecStart=/home/cimi/waver-env/bin/python3 /home/cimi/waver/launcher/launcher.py
 Restart=always
 RestartSec=5
 
