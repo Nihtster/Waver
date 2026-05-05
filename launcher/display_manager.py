@@ -7,40 +7,59 @@ from PIL import Image, ImageDraw, ImageFont
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 BLACK      = (0,   0,   0)
-CYAN       = (0,   229, 255)   # #00E5FF — primary accent
+CYAN       = (0,   229, 255)
 WHITE      = (255, 255, 255)
-GREEN      = (0,   210, 80)    # active service
-BLUE       = (30,  144, 255)   # connected / VPN
-GRAY       = (100, 100, 110)   # inactive / secondary
-RED        = (255, 70,  70)    # error / failed
-DARK_CYAN  = (0,   45,  55)    # selected-item background
-DIM_WHITE  = (170, 170, 180)   # secondary text
-DIVIDER    = (35,  35,  45)    # subtle divider lines
+GREEN      = (0,   210, 80)
+BLUE       = (30,  144, 255)
+GRAY       = (100, 100, 110)
+RED        = (255, 70,  70)
+DARK_CYAN  = (0,   45,  55)
+DIM_WHITE  = (170, 170, 180)
+DIVIDER    = (35,  35,  45)
 
-WIDTH  = 128
-HEIGHT = 128
+WIDTH          = 128
+HEIGHT         = 128
+ITEMS_PER_PAGE = 3
 
 
-# ── Crisp thin text ───────────────────────────────────────────────────────────
-# Strategy: render with Pillow's bundled TrueType (thin strokes) into a
-# greyscale buffer, then threshold to snap every pixel to fully-on or
-# fully-off. This removes the anti-aliased fringe while preserving the
-# lighter weight of TrueType letterforms. For larger text we render at 1×
-# then scale up with NEAREST so the result stays pixel-hard at any size.
+# ── Font loading ──────────────────────────────────────────────────────────────
+# Prefer monospace fonts for the terminal aesthetic. Falls back gracefully
+# through proportional TrueType, then Pillow's built-in default.
 
 _FONT_CACHE: dict = {}
+_SYSTEM_FONT_PATHS = [
+    # Raspberry Pi OS (Bookworm)
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeMonoBold.ttf",
+    # macOS (simulator)
+    "/System/Library/Fonts/Menlo.ttc",
+    "/Library/Fonts/Courier New.ttf",
+    # Generic proportional fallbacks
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/Library/Fonts/Arial.ttf",
+]
 
 def _font(size: int):
     if size not in _FONT_CACHE:
-        _FONT_CACHE[size] = ImageFont.load_default(size=size)
+        for path in _SYSTEM_FONT_PATHS:
+            try:
+                _FONT_CACHE[size] = ImageFont.truetype(path, size)
+                break
+            except (IOError, OSError):
+                continue
+        else:
+            _FONT_CACHE[size] = ImageFont.load_default(size=size)
     return _FONT_CACHE[size]
 
 
-def _text(draw, xy, text, size=8, scale=1, fill=WHITE):
+def _text(draw, xy, text, size=11, scale=1, fill=WHITE):
     """
-    Thin, crisp text: TrueType letterforms with AA fringe stripped out.
-    size  — point size before any scaling
-    scale — integer upscale applied after thresholding (NEAREST, no blur)
+    Crisp text: render into a greyscale buffer, threshold to binary
+    (removes antialiasing haze), then paste as a solid colour.
+    scale=2 gives pixel-doubled text via NEAREST resize — no blur.
     """
     text = str(text)
     font = _font(size)
@@ -53,10 +72,7 @@ def _text(draw, xy, text, size=8, scale=1, fill=WHITE):
 
     tmp = Image.new("L", (w + 2, h + 2), 0)
     ImageDraw.Draw(tmp).text((1 - x0, 1 - y0), text, font=font, fill=255)
-
-    # Threshold: pixels whose coverage >= 38 % stay solid, rest drop to 0.
-    # Raising this value → thinner strokes; lowering → thicker.
-    tmp = tmp.point(lambda p: 255 if p >= 96 else 0)
+    tmp = tmp.point(lambda p: 255 if p >= 48 else 0)
 
     if scale > 1:
         tmp = tmp.resize((tmp.width * scale, tmp.height * scale), Image.NEAREST)
@@ -65,32 +81,43 @@ def _text(draw, xy, text, size=8, scale=1, fill=WHITE):
     draw._image.paste(colored, (int(xy[0]), int(xy[1])), tmp)
 
 
+def _centered_text(draw, y, text, size=11, scale=1, fill=WHITE):
+    text = str(text)
+    font = _font(size)
+    bbox = font.getbbox(text)
+    if not bbox or bbox[2] <= bbox[0]:
+        return
+    w = (bbox[2] - bbox[0]) * scale
+    x = max(0, (WIDTH - w) // 2)
+    _text(draw, (x, y), text, size=size, scale=scale, fill=fill)
+
+
 # ── Shared drawing primitives ─────────────────────────────────────────────────
 
 def _status_bar(draw):
     from datetime import datetime
     t = datetime.now().strftime("%H:%M")
     draw.rectangle([(0, 0), (WIDTH - 1, 13)], fill=(8, 8, 12))
-    _text(draw, (3, 3), t, size=8, fill=DIM_WHITE)
-    _wifi_bars(draw, 112, 3)
+    _text(draw, (3, 2), t, size=9, fill=DIM_WHITE)
+    _wifi_icon(draw, 119, 0)
 
 
-def _wifi_bars(draw, x, y):
-    """Three signal-strength bars — crisp pixel art, no Unicode needed."""
-    for i, h in enumerate((4, 6, 8)):
-        bx = x + i * 4
-        by = y + (8 - h)
-        col = CYAN if i < 3 else GRAY
-        draw.rectangle([bx, by, bx + 2, y + 8], fill=col)
+def _wifi_icon(draw, cx, cy):
+    """3-arc WiFi symbol. cx/cy = centre of the dot at the base."""
+    bx, by = cx, cy + 9
+    _dot(draw, bx, by, 1, CYAN)
+    for r in (3, 5, 7):
+        box = [bx - r, by - r, bx + r, by + r]
+        draw.arc(box, start=215, end=325, fill=CYAN)
 
 
 def _divider(draw, y):
     draw.line([(0, y), (WIDTH - 1, y)], fill=DIVIDER)
 
 
-def _footer(draw, label, y=116):
+def _footer(draw, label, y=118):
     _divider(draw, y - 3)
-    _text(draw, (4, y), f"> {label}", size=8, fill=CYAN)
+    _text(draw, (4, y), f"> {label}", size=9, fill=CYAN)
 
 
 def _waveform(draw, x, y, w, h, phase=0.0, color=CYAN):
@@ -106,6 +133,65 @@ def _waveform(draw, x, y, w, h, phase=0.0, color=CYAN):
 
 def _dot(draw, cx, cy, r, color):
     draw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], fill=color)
+
+
+def _mini_bars(draw, x, y, pct):
+    """Rising 5-bar chart for percentage values (20px wide, 11px tall)."""
+    heights = (3, 5, 7, 9, 11)
+    bottom = y + 11
+    for i, h in enumerate(heights):
+        col = CYAN if pct >= (i + 1) * 20 else GRAY
+        draw.rectangle([x + i * 4, bottom - h, x + i * 4 + 2, bottom], fill=col)
+
+
+def _page_dots(draw, current_page, total_pages, y=110):
+    """Centred row of filled/hollow dots indicating current page."""
+    if total_pages <= 1:
+        return
+    spacing = 9
+    total_w  = (total_pages - 1) * spacing
+    x_start  = (WIDTH - total_w) // 2
+    for i in range(total_pages):
+        cx = x_start + i * spacing
+        if i == current_page:
+            _dot(draw, cx, y, 3, CYAN)
+        else:
+            draw.ellipse([(cx - 3, y - 3), (cx + 3, y + 3)], outline=GRAY)
+
+
+def _list_page(items, selected_index):
+    """Slice items for the current page.
+    Returns (page_items, local_selected, current_page, total_pages)."""
+    total = len(items)
+    if total == 0:
+        return [], 0, 0, 1
+    page        = selected_index // ITEMS_PER_PAGE
+    total_pages = math.ceil(total / ITEMS_PER_PAGE)
+    start       = page * ITEMS_PER_PAGE
+    return items[start:start + ITEMS_PER_PAGE], selected_index % ITEMS_PER_PAGE, page, total_pages
+
+
+def _draw_list(draw, title, page_items, local_sel, page, total_pages, item_fn):
+    """
+    Shared scaffold for all paginated list screens.
+    Layout (px):  0-13 status  14 div  15-28 header  29 div
+                  30-104 items (3×25)  105-114 dots  115 div  118 footer
+    item_fn(draw, y, label, is_selected) — caller draws row content.
+    """
+    _status_bar(draw)
+    _divider(draw, 14)
+    _text(draw, (4, 16), title, size=11, fill=CYAN)
+    _divider(draw, 29)
+
+    y = 30
+    for i, item in enumerate(page_items):
+        selected = (i == local_sel)
+        if selected:
+            draw.rectangle([(0, y), (WIDTH - 1, y + 24)], fill=DARK_CYAN)
+        item_fn(draw, y, item, selected)
+        y += 25
+
+    _page_dots(draw, page, total_pages, y=110)
 
 
 # ── DisplayManager ────────────────────────────────────────────────────────────
@@ -141,22 +227,20 @@ class DisplayManager:
             _status_bar(draw)
             _divider(draw, 14)
 
-            _waveform(draw, x=8, y=17, w=112, h=28, phase=phase)
+            _waveform(draw, x=8, y=16, w=112, h=24, phase=phase)
+            _centered_text(draw, 42, "WAVER", size=10, scale=2, fill=CYAN)
 
-            # "WAVER" brand at 2× scale — centered
-            _text(draw, (34, 47), "WAVER", size=8, scale=2, fill=CYAN)
-
-            _divider(draw, 67)
+            _divider(draw, 65)
 
             ph_color = GREEN if pihole_status == "active" else GRAY
-            _dot(draw, 9, 75, 4, ph_color)
-            _text(draw, (18, 70), "Pi-hole", size=8, fill=WHITE)
-            _text(draw, (18, 80), "Active" if pihole_status == "active" else "Inactive", size=7, fill=ph_color)
+            _dot(draw, 8, 76, 4, ph_color)
+            _text(draw, (18, 67), "Pi-hole", size=11, fill=WHITE)
+            _text(draw, (18, 80), "Active" if pihole_status == "active" else "Inactive", size=9, fill=ph_color)
 
             wg_color = BLUE if wg_status == "active" else GRAY
-            _dot(draw, 9, 95, 4, wg_color)
-            _text(draw, (18, 90), "WireGuard", size=8, fill=WHITE)
-            _text(draw, (18, 100), "Connected" if wg_status == "active" else "Inactive", size=7, fill=wg_color)
+            _dot(draw, 8, 101, 4, wg_color)
+            _text(draw, (18, 92), "WireGuard", size=11, fill=WHITE)
+            _text(draw, (18, 105), "Connected" if wg_status == "active" else "Inactive", size=9, fill=wg_color)
 
             _footer(draw, "Tools")
             self._push(img)
@@ -167,26 +251,22 @@ class DisplayManager:
         """items: list of (label, status_label, dot_color)"""
         with self.lock:
             img, draw = self._frame()
-            _status_bar(draw)
-            _divider(draw, 14)
+            page_items, local_sel, page, total_pages = _list_page(items, selected_index)
 
-            _text(draw, (4, 17), "TOOLS", size=8, fill=CYAN)
-            _divider(draw, 28)
-
-            y = 31
-            row_h = 13
-            for i, (label, status, color) in enumerate(items):
-                if i == selected_index:
-                    draw.rectangle([(0, y - 1), (WIDTH - 1, y + row_h - 2)], fill=DARK_CYAN)
-                    text_col = CYAN
+            def _row(draw, y, item, selected):
+                label, status, color = item
+                text_col = CYAN if selected else WHITE
+                _dot(draw, 8, y + 12, 4, color if color else GRAY)
+                if status:
+                    _text(draw, (18, y + 3),  label,  size=11, fill=text_col)
+                    _text(draw, (18, y + 15), status, size=9,
+                          fill=(color if color else GRAY) if not selected else CYAN)
                 else:
-                    text_col = WHITE
+                    _text(draw, (18, y + 7),  label,  size=11, fill=text_col)
+                _text(draw, (118, y + 8), ">", size=9, fill=GRAY)
 
-                _dot(draw, 7, y + 5, 3, color if color else GRAY)
-                _text(draw, (15, y + 2), label, size=8, fill=text_col)
-                _text(draw, (120, y + 2), ">", size=8, fill=GRAY)
-                y += row_h
-
+            _draw_list(draw, "TOOLS", page_items, local_sel, page, total_pages, _row)
+            _footer(draw, "Back")
             self._push(img)
 
     # ── PI-HOLE DETAIL ────────────────────────────────────────────────────────
@@ -198,19 +278,19 @@ class DisplayManager:
             _divider(draw, 14)
 
             ph_color = GREEN if status == "active" else GRAY
-            _dot(draw, 8, 22, 4, ph_color)
-            _text(draw, (16, 17), "Pi-hole", size=8, fill=CYAN)
-            _text(draw, (16, 27), "Active" if status == "active" else "Inactive", size=7, fill=ph_color)
+            _dot(draw, 8, 24, 4, ph_color)
+            _text(draw, (18, 16), "Pi-hole", size=11, fill=CYAN)
+            _text(draw, (18, 29), "Active" if status == "active" else "Inactive", size=9, fill=ph_color)
 
-            _divider(draw, 38)
+            _divider(draw, 42)
 
-            _text(draw, (4, 41), "Blocked Today", size=7, fill=DIM_WHITE)
-            _text(draw, (4, 51), f"{blocked_today:,}", size=8, scale=2, fill=WHITE)
+            _text(draw, (4, 44), "Blocked Today", size=9, fill=DIM_WHITE)
+            _centered_text(draw, 55, f"{blocked_today:,}", size=11, scale=2, fill=WHITE)
 
-            _divider(draw, 76)
+            _divider(draw, 80)
 
-            _text(draw, (4, 79), "Top Domain", size=7, fill=DIM_WHITE)
-            _text(draw, (4, 89), (top_domain or "N/A")[:18], size=8, fill=WHITE)
+            _text(draw, (4, 83), "Top Domain", size=9, fill=DIM_WHITE)
+            _text(draw, (4, 96), (top_domain or "N/A")[:15], size=10, fill=WHITE)
 
             action = "Disable" if status == "active" else "Enable"
             _footer(draw, action)
@@ -225,20 +305,20 @@ class DisplayManager:
             _divider(draw, 14)
 
             wg_color = BLUE if status == "active" else GRAY
-            _dot(draw, 8, 22, 4, wg_color)
-            _text(draw, (16, 17), "WireGuard", size=8, fill=CYAN)
-            _text(draw, (16, 27), "Connected" if status == "active" else "Inactive", size=7, fill=wg_color)
+            _dot(draw, 8, 24, 4, wg_color)
+            _text(draw, (18, 16), "WireGuard", size=11, fill=CYAN)
+            _text(draw, (18, 29), "Connected" if status == "active" else "Inactive", size=9, fill=wg_color)
 
-            _divider(draw, 38)
+            _divider(draw, 42)
 
-            _text(draw, (4, 42), "Endpoint", size=7, fill=DIM_WHITE)
-            _text(draw, (4, 52), endpoint or "N/A", size=8, fill=WHITE)
+            _text(draw, (4, 45), "Endpoint", size=9, fill=DIM_WHITE)
+            _text(draw, (4, 57), endpoint or "N/A", size=10, fill=WHITE)
 
-            _divider(draw, 65)
+            _divider(draw, 72)
 
-            _text(draw, (4, 69), "Transfer", size=7, fill=DIM_WHITE)
-            _text(draw, (4, 80), f"Dn {rx}", size=8, fill=CYAN)
-            _text(draw, (4, 92), f"Up {tx}", size=8, fill=GREEN)
+            _text(draw, (4, 75), "Transfer", size=9, fill=DIM_WHITE)
+            _text(draw, (4, 88),  f"↓ {rx}", size=10, fill=CYAN)
+            _text(draw, (4, 103), f"↑ {tx}", size=10, fill=GREEN)
 
             action = "Disconnect" if status == "active" else "Connect"
             _footer(draw, action)
@@ -249,26 +329,16 @@ class DisplayManager:
     def draw_wifi_scan(self, networks, selected_index=0):
         with self.lock:
             img, draw = self._frame()
-            _status_bar(draw)
-            _divider(draw, 14)
+            page_items, local_sel, page, total_pages = _list_page(networks, selected_index)
 
-            _text(draw, (4, 17), "WiFi Scan", size=8, fill=CYAN)
-            _divider(draw, 28)
+            def _row(draw, y, item, selected):
+                ssid, signal = item
+                text_col = CYAN if selected else WHITE
+                _text(draw, (4,  y + 7), "~",         size=11, fill=CYAN)
+                _text(draw, (16, y + 7), ssid[:11],   size=11, fill=text_col)
+                _text(draw, (98, y + 8), str(signal),  size=9, fill=GRAY)
 
-            y = 31
-            row_h = 14
-            for i, (ssid, signal) in enumerate(networks[:5]):
-                if i == selected_index:
-                    draw.rectangle([(0, y - 1), (WIDTH - 1, y + row_h - 2)], fill=DARK_CYAN)
-                    text_col = CYAN
-                else:
-                    text_col = WHITE
-
-                _text(draw, (3, y + 2), "~", size=8, fill=CYAN)
-                _text(draw, (13, y + 2), ssid[:13], size=8, fill=text_col)
-                _text(draw, (100, y + 2), str(signal), size=7, fill=GRAY)
-                y += row_h
-
+            _draw_list(draw, "WiFi Scan", page_items, local_sel, page, total_pages, _row)
             _footer(draw, "Back")
             self._push(img)
 
@@ -277,23 +347,15 @@ class DisplayManager:
     def draw_wifi_toolkit(self, items, selected_index=0):
         with self.lock:
             img, draw = self._frame()
-            _status_bar(draw)
-            _divider(draw, 14)
+            page_items, local_sel, page, total_pages = _list_page(items, selected_index)
 
-            _text(draw, (4, 17), "WiFi Toolkit", size=8, fill=CYAN)
-            _divider(draw, 28)
+            def _row(draw, y, label, selected):
+                text_col = CYAN if selected else WHITE
+                _text(draw, (10, y + 7),  label, size=11, fill=text_col)
+                _text(draw, (118, y + 8), ">",   size=9,  fill=GRAY)
 
-            y = 31
-            row_h = 15
-            for i, label in enumerate(items):
-                if i == selected_index:
-                    draw.rectangle([(0, y - 1), (WIDTH - 1, y + row_h - 2)], fill=DARK_CYAN)
-                    text_col = CYAN
-                else:
-                    text_col = WHITE
-                _text(draw, (8, y + 3), label, size=8, fill=text_col)
-                y += row_h
-
+            _draw_list(draw, "WiFi Toolkit", page_items, local_sel, page, total_pages, _row)
+            _footer(draw, "Select")
             self._push(img)
 
     # ── DASHBOARD ─────────────────────────────────────────────────────────────
@@ -305,18 +367,20 @@ class DisplayManager:
             _divider(draw, 14)
 
             rows = [
-                ("CPU",     f"{cpu}%"),
-                ("MEM",     f"{mem}%"),
-                ("UPTIME",  str(uptime)),
-                ("CLIENTS", str(clients)),
+                ("CPU",     f"{cpu}%",    cpu  if isinstance(cpu, int) else 0),
+                ("MEM",     f"{mem}%",    mem  if isinstance(mem, int) else 0),
+                ("UPTIME",  str(uptime),  None),
+                ("CLIENTS", str(clients), None),
             ]
 
-            y = 18
-            for label, value in rows:
-                draw.rectangle([(2, y), (WIDTH - 3, y + 19)], outline=DIVIDER)
-                _text(draw, (6, y + 6), label, size=7, fill=DIM_WHITE)
-                _text(draw, (68, y + 6), value, size=8, fill=CYAN)
-                y += 23
+            y = 15
+            for label, value, pct in rows:
+                draw.rectangle([(2, y), (WIDTH - 3, y + 22)], outline=DIVIDER)
+                _text(draw, (6,  y + 6), label, size=9,  fill=DIM_WHITE)
+                _text(draw, (56, y + 5), value, size=11, fill=CYAN)
+                if pct is not None:
+                    _mini_bars(draw, 100, y + 6, int(pct))
+                y += 25
 
             _footer(draw, "Back")
             self._push(img)
@@ -331,10 +395,10 @@ class DisplayManager:
             _status_bar(draw)
             _divider(draw, 14)
 
-            _waveform(draw, x=8, y=20, w=112, h=24, phase=phase)
-            _text(draw, (34, 47), "WAVER", size=8, scale=2, fill=CYAN)
-            _text(draw, (46, 67), "v1.0.0", size=7, fill=DIM_WHITE)
-            _text(draw, (40, 79), "by you", size=7, fill=GRAY)
+            _waveform(draw, x=8, y=16, w=112, h=24, phase=phase)
+            _centered_text(draw, 43, "WAVER",  size=10, scale=2, fill=CYAN)
+            _centered_text(draw, 69, "v1.0.0", size=10, fill=DIM_WHITE)
+            _centered_text(draw, 84, "by you", size=9,  fill=GRAY)
 
             _footer(draw, "Back")
             self._push(img)
@@ -342,52 +406,36 @@ class DisplayManager:
     # ── SETTINGS MENU ────────────────────────────────────────────────────────
 
     def draw_settings(self, items, selected_index=0):
-        """items: list of label strings"""
         with self.lock:
             img, draw = self._frame()
-            _status_bar(draw)
-            _divider(draw, 14)
+            page_items, local_sel, page, total_pages = _list_page(items, selected_index)
 
-            _text(draw, (4, 17), "Settings", size=8, fill=CYAN)
-            _divider(draw, 28)
+            def _row(draw, y, label, selected):
+                text_col = CYAN if selected else WHITE
+                _text(draw, (10, y + 7),  label, size=11, fill=text_col)
+                _text(draw, (118, y + 8), ">",   size=9,  fill=GRAY)
 
-            y = 31
-            row_h = 15
-            for i, label in enumerate(items):
-                if i == selected_index:
-                    draw.rectangle([(0, y - 1), (WIDTH - 1, y + row_h - 2)], fill=DARK_CYAN)
-                    text_col = CYAN
-                else:
-                    text_col = WHITE
-                _text(draw, (8, y + 3), label, size=8, fill=text_col)
-                _text(draw, (120, y + 3), ">", size=8, fill=GRAY)
-                y += row_h
-
+            _draw_list(draw, "Settings", page_items, local_sel, page, total_pages, _row)
+            _footer(draw, "Back")
             self._push(img)
 
     # ── UPDATE STATUS ─────────────────────────────────────────────────────────
 
     def draw_update_status(self, title, message="", hint=""):
-        """
-        Full-screen update progress display.
-        title   — primary status line (e.g. "Checking…", "Up to date")
-        message — secondary detail line
-        hint    — optional bottom prompt (e.g. "SELECT to install")
-        """
         with self.lock:
             img, draw = self._frame()
             _status_bar(draw)
             _divider(draw, 14)
 
-            _text(draw, (4, 17), "Update", size=8, fill=CYAN)
-            _divider(draw, 28)
+            _text(draw, (4, 16), "Update", size=11, fill=CYAN)
+            _divider(draw, 29)
 
-            _text(draw, (4, 40), title,   size=8, fill=WHITE)
+            _text(draw, (4, 42), title, size=11, fill=WHITE)
             if message:
-                _text(draw, (4, 54), message, size=7, fill=DIM_WHITE)
+                _text(draw, (4, 58), message, size=9, fill=DIM_WHITE)
             if hint:
                 _divider(draw, 100)
-                _text(draw, (4, 103), hint, size=7, fill=CYAN)
+                _text(draw, (4, 104), hint, size=9, fill=CYAN)
 
             self._push(img)
 
@@ -399,10 +447,11 @@ class DisplayManager:
             _status_bar(draw)
             _divider(draw, 14)
 
-            _text(draw, (4, 17), title[:20], size=8, fill=CYAN)
-            _divider(draw, 28)
-            _text(draw, (10, 52), "Not yet", size=8, fill=GRAY)
-            _text(draw, (10, 64), "implemented", size=8, fill=GRAY)
+            _text(draw, (4, 16), title[:14], size=11, fill=CYAN)
+            _divider(draw, 29)
+
+            _text(draw, (10, 55), "Not yet",     size=11, fill=GRAY)
+            _text(draw, (10, 71), "implemented", size=11, fill=GRAY)
 
             _footer(draw, "Back")
             self._push(img)
@@ -415,10 +464,10 @@ class DisplayManager:
             _status_bar(draw)
             _divider(draw, 14)
 
-            y = 18
+            y = 22
             for line in lines:
-                _text(draw, (5, y), str(line)[:21], size=8, fill=WHITE)
-                y += 12
+                _text(draw, (5, y), str(line)[:17], size=11, fill=WHITE)
+                y += 18
 
             self._push(img)
 
