@@ -1,0 +1,14 @@
+[Unit]
+Description=WAVER Launcher
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/cimi/waver/launcher
+ExecStart=/home/cimi/swisspi-env/bin/python3 /home/cimi/waver/launcher/launcher.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

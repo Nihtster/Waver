@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Network info module for SwissPI launcher
+Network info module for WAVER launcher
 Pulls live data: IP, WiFi signal, uptime, CPU temp, Pi-hole stats
 """
 

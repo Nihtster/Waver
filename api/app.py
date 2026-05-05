@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SwissPI Flask API
+WAVER Flask API
 """
 
 from flask import Flask, jsonify, request, send_from_directory

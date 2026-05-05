@@ -1,5 +1,5 @@
 const API = '';
-let token = localStorage.getItem('swisspi_token');
+let token = localStorage.getItem('waver_token');
 let selectedSSID = null;
 
 window.onload = () => {
@@ -28,7 +28,7 @@ async function login() {
         const data = await res.json();
         if (data.token) {
             token = data.token;
-            localStorage.setItem('swisspi_token', token);
+            localStorage.setItem('waver_token', token);
             showDashboard();
             loadAll();
             startAutoRefresh();
@@ -42,7 +42,7 @@ async function login() {
 }
 
 function logout() {
-    localStorage.removeItem('swisspi_token');
+    localStorage.removeItem('waver_token');
     token = null;
     showLogin();
 }

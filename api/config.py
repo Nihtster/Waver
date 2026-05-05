@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SwissPI API Configuration
+WAVER API Configuration
 
 SETUP INSTRUCTIONS:
 1. Generate a bcrypt password hash:

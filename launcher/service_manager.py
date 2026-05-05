@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Service manager for SwissPI
+Service manager for WAVER
 Handles systemd service control and status queries
 """
 

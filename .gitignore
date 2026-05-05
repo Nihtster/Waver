@@ -1,0 +1,12 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Secrets (never commit these)
+api/config.py
+
+# macOS
+.DS_Store
