@@ -14,7 +14,7 @@ import subprocess
 import os
 import sys
 
-REPO_PATH         = os.path.expanduser("~/waver")
+REPO_PATH         = "/home/cimi/waver"
 SERVICES_RESTART  = ["waver", "waver-api"]
 GIT_TIMEOUT       = 30   # seconds per git command
 
