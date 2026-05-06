@@ -95,6 +95,18 @@ NetworkManager's `shared` mode hands out the Pi as DNS via DHCP, so
 clients automatically use Pi-hole — no extra configuration needed on
 the connecting device.
 
+> **Why the setup script writes a NM dnsmasq drop-in:**
+> NM's `shared` mode spawns its own `dnsmasq` for DHCP **and** DNS to
+> clients. That `dnsmasq` tries to bind port 53 on the gateway IP
+> (`10.42.0.1`), but Pi-hole already owns 53 on all interfaces. The
+> bind fails, NM marks the connection "ip-config-unavailable" after
+> ~30s, and the hotspot dies. The fix is dropping `port=0` into
+> `/etc/NetworkManager/dnsmasq-shared.d/00-waver-no-dns.conf`, which
+> tells NM's dnsmasq "DHCP only, no DNS." `setup-hotspot.py` writes
+> this file as part of one-time setup. Pi-hole keeps owning 53;
+> clients still use it because NM tells them their DNS is the gateway,
+> and Pi-hole answers there.
+
 > **Stacking with WireGuard:** if you also bring up WG while the hotspot
 > is active, WG clients (`10.0.0.0/24`) are on a *different* subnet from
 > `wlan0`. For Pi-hole to answer their DNS queries, set

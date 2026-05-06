@@ -25,6 +25,16 @@ import sys
 
 PROFILE_NAME = "waver-hotspot"
 
+# NetworkManager spawns its own dnsmasq for DHCP+DNS when a connection uses
+# `ipv4.method shared`. We want DHCP only — DNS is Pi-hole's job, and
+# pi-hole already owns port 53 on the interface, so NM's dnsmasq can't bind
+# and the hotspot dies after ~30s with "ip-config-unavailable".
+# Dropping `port=0` into NM's shared-dnsmasq.d disables NM's DNS without
+# breaking DHCP. Clients still get told "DNS = gateway", and pi-hole
+# answers them.
+DNSMASQ_DROPIN = "/etc/NetworkManager/dnsmasq-shared.d/00-waver-no-dns.conf"
+DNSMASQ_DROPIN_BODY = "# Created by Waver setup-hotspot.py\nport=0\n"
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "api"))
 
@@ -79,9 +89,16 @@ run([
     "wifi-sec.psk",          HOTSPOT_PASSWORD,
 ])
 
+# Drop in dnsmasq config: DHCP-only for shared connections (Pi-hole owns DNS)
+dropin_path = pathlib.Path(DNSMASQ_DROPIN)
+dropin_path.parent.mkdir(parents=True, exist_ok=True)
+dropin_path.write_text(DNSMASQ_DROPIN_BODY)
+dropin_path.chmod(0o644)
+
 print(f"✓ Hotspot profile created: {PROFILE_NAME}")
 print(f"  SSID:    {HOTSPOT_SSID}")
 print(f"  Subnet:  10.42.0.1/24  (NetworkManager 'shared' default)")
+print(f"✓ NM dnsmasq drop-in: {DNSMASQ_DROPIN} (port=0 — DHCP-only)")
 print()
 print("Toggle from the LCD:  Settings -> Hotspot")
 print("Or manually:")
