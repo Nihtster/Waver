@@ -1,4 +1,4 @@
-# SwissPI — Session Log
+# WAVER — Session Log
 # For use with Claude Code to continue development
 
 ## Project Overview
@@ -15,7 +15,7 @@ dashboard accessible from any device on the network.
 - **Storage:** 32GB SD card
 - **OS:** Raspberry Pi OS Lite 64-bit
 - **Static IP:** 192.168.0.191
-- **Hostname:** swisspi / cimi@cimi
+- **Hostname:** waver
 - **Username:** cimi
 
 ---
@@ -53,21 +53,22 @@ Note: GPIO 24 is always LOW at startup (backlight pin, pulled high by hardware)
 
 ### Problem
 The ST7735S controller has internal memory of 132x162 pixels, but the physical
-display is 128x128. This causes glitch lines on the right and bottom edges.
+display is 128x128. This causes glitch lines on the edges.
 
 ### Solution
 The luma.lcd library does NOT support offset parameters for ST7735. We wrote a
 custom raw SPI driver based on Waveshare's official Python demo code.
 
-### Key offsets (discovered through testing)
+### Key offsets (discovered through testing on current hardware)
 ```python
-LCD_X_ADJUST = 2   # Column offset
+LCD_X_ADJUST = 1   # Column offset — NOTE: was 2 on original setup, 1 on reinstall
 LCD_Y_ADJUST = 2   # Row offset
 ```
 
 These MUST be applied on every draw call (not just at initialization).
 The luma library resets the window on every frame, which is why one-time
-offset commands don't work.
+offset commands don't work. If glitch lines reappear after a reinstall,
+re-test LCD_X_ADJUST values 0–4 until clean.
 
 ### Driver file: launcher/st7735_fixed.py
 - Bypasses luma entirely
@@ -91,15 +92,15 @@ offset commands don't work.
 ## Python Environment
 
 ### Location
-~/swisspi-env (Python virtualenv)
+~/waver-env (Python virtualenv)
 
 ### Key packages
 ```
-numpy==2.4.4
-pillow==12.2.0
-RPi.GPIO==0.7.1
-spidev==3.8
-smbus2==0.6.1
+numpy
+pillow
+RPi.GPIO
+spidev
+smbus2
 flask
 flask-socketio
 flask-cors
@@ -113,7 +114,7 @@ gevent-websocket
 ### Running scripts
 Always use full path to avoid venv issues:
 ```bash
-sudo ~/swisspi-env/bin/python3 script.py
+sudo ~/waver-env/bin/python3 script.py
 ```
 
 ### WSGI server
@@ -125,21 +126,29 @@ eventlet is NOT compatible with Python 3.13 (our version).
 ## Project File Structure
 
 ```
-~/swisspi/
+~/waver/
 ├── launcher/
 │   ├── launcher.py          # Main menu loop + input handling
-│   ├── display_manager.py   # Wrapper around ST7735Fixed
+│   ├── display_manager.py   # All screen rendering (monospace font, paginated menus)
 │   ├── st7735_fixed.py      # Custom ST7735S driver (raw SPI)
 │   ├── input_manager.py     # GPIO button/joystick polling (threaded)
 │   ├── service_manager.py   # systemd service control via subprocess
-│   └── network_info.py      # Live network data (IP, signal, temp, pihole)
+│   ├── network_info.py      # Live network data (IP, signal, temp, pihole)
+│   └── updater.py           # OTA git pull + service restart
 ├── api/
 │   ├── app.py               # Flask REST API + SocketIO
-│   └── config.py            # Passwords, secrets, config (NOT in git)
-└── dashboard/
-    ├── index.html           # Web dashboard UI
-    ├── style.css            # Dark theme styles
-    └── app.js               # Frontend JS (fetch API, JWT auth)
+│   ├── config.py            # Passwords, secrets, config (NOT in git — Pi only)
+│   └── config.example.py   # Template for fresh setup
+├── dashboard/
+│   ├── index.html           # Web dashboard UI
+│   ├── style.css            # Dark theme styles
+│   └── app.js               # Frontend JS (fetch API, JWT auth)
+├── config/
+│   ├── nginx/waver.conf     # nginx reverse proxy config
+│   ├── systemd/waver.service      # LCD launcher systemd unit
+│   ├── systemd/waver-api.service  # Flask API systemd unit
+│   └── wg0.conf.template    # WireGuard config template
+└── simulator/               # Local dev simulator (pygame, hot-reload)
 ```
 
 ---
@@ -147,11 +156,15 @@ eventlet is NOT compatible with Python 3.13 (our version).
 ## Launcher Architecture
 
 ### Menu system
-- Menus defined as dicts in launcher.py
-- Each menu has: title, items list, type (services/regular)
-- Navigation: joystick UP/DOWN cycles items, PRESS/KEY1 selects
-- KEY2 shows system status overlay
-- KEY3 goes back to main menu
+- Screens: HOME, TOOLS, PIHOLE, WIREGUARD, WIFI_SCAN, WIFI_KIT,
+  DASHBOARD, SETTINGS, UPDATE, ABOUT, PLACEHOLDER
+- Navigation: joystick UP/DOWN cycles items, PRESS/KEY1/JOY_RIGHT selects
+- KEY2 goes to dashboard, KEY3/JOY_LEFT goes back
+
+### Pagination
+- All list screens show 3 items per page
+- Page indicator dots shown at bottom
+- selected_index is global across all items; display_manager slices per page
 
 ### Input handling
 - InputManager polls GPIO in a background thread
@@ -161,10 +174,10 @@ eventlet is NOT compatible with Python 3.13 (our version).
 
 ### Display rendering
 - DisplayManager wraps ST7735Fixed
+- Monospace font (DejaVuSansMono on Pi, Menlo on macOS simulator)
 - Threading lock prevents concurrent SPI writes
-- draw_menu() renders title + item list with selected item in green
-- draw_status() renders a simple text list
 - All rendering creates a PIL Image then calls device.display()
+- Font binarisation threshold=48 for bold crisp strokes
 
 ### Service integration
 - ServiceManager wraps systemctl via subprocess
@@ -175,16 +188,20 @@ eventlet is NOT compatible with Python 3.13 (our version).
 ### GPIO initialization order (CRITICAL)
 InputManager MUST be initialized before DisplayManager.
 InputManager calls GPIO.setmode(BCM) which ST7735Fixed depends on.
-If DisplayManager initializes first, luma tries to set GPIO mode and conflicts.
+
+### OTA Updater
+- REPO_PATH = "/home/cimi/waver" (absolute path — service runs as root, ~ = /root)
+- git safe.directory must be set: `sudo git config --global --add safe.directory /home/cimi/waver`
+- Checks git fetch, compares HEAD to @{u}, pulls with --ff-only
 
 ---
 
 ## Services Running
 
-### pihole-FTL (Pi-hole v6.4.2)
+### pihole-FTL (Pi-hole v6)
 - Runs on port 8080 (moved from 80 to free it for nginx)
 - Config: /etc/pihole/pihole.toml
-- Port changed in toml: `port = "8080o,8443os,[::]:8080o,[::]:8443os"`
+- Port setting: `port = "8080o,8443os,[::]:8080o,[::]:8443os"`
 - Web admin: http://192.168.0.191:8080/admin
 - systemd: pihole-FTL
 
@@ -198,48 +215,47 @@ If DisplayManager initializes first, luma tries to set GPIO mode and conflicts.
 ### nginx
 - Owns port 80
 - Reverse proxies to Flask API on port 5000
-- Config: /etc/nginx/sites-available/swisspi
-- server_name: swisspi.local 192.168.0.191 _
-- Removed WebSocket upgrade headers (caused hanging) — plain proxy works fine
+- Config: /etc/nginx/sites-available/waver
+- Proxies /pihole/ to port 8080
+- No WebSocket upgrade headers (caused connection hanging)
 
-### swisspi-api (Flask + gunicorn)
+### waver-api (Flask + gunicorn)
 - Port: 5000 (internal, proxied by nginx)
 - Worker: geventwebsocket.gunicorn.workers.GeventWebSocketWorker
 - 1 worker process
-- systemd: swisspi-api
+- systemd: waver-api
 
-### swisspi (LCD Launcher)
+### waver (LCD Launcher)
 - Autostart on boot
-- WorkingDirectory: /home/cimi/swisspi/launcher
+- WorkingDirectory: /home/cimi/waver/launcher
 - Runs as root (required for GPIO/SPI access)
-- systemd: swisspi
+- systemd: waver
 
 ---
 
 ## Web Dashboard
 
 ### Authentication
-- bcrypt password hash stored in api/config.py
+- bcrypt password hash stored in api/config.py (off-repo)
 - Login returns JWT token (24hr expiry, HS256)
 - Token stored in browser localStorage
 - All API endpoints require Authorization: Bearer <token> header
-- WebSocket auth via auth dict on connect
 
 ### API Endpoints
 ```
-POST /api/auth/login          — Login, returns JWT token
-GET  /api/system/status       — Uptime, temp, IP, all service statuses
-GET  /api/network/info        — IP, WiFi signal strength
-GET  /api/network/wifi/scan   — Scan nearby WiFi networks (iwlist)
-POST /api/network/wifi/connect — Connect to WiFi network (nmcli)
-GET  /api/services/pihole     — Pi-hole status + stats
+POST /api/auth/login                — Login, returns JWT token
+GET  /api/system/status             — Uptime, temp, IP, all service statuses
+GET  /api/network/info              — IP, WiFi signal strength
+GET  /api/network/wifi/scan         — Scan nearby WiFi networks (iwlist)
+POST /api/network/wifi/connect      — Connect to WiFi network (nmcli)
+GET  /api/services/pihole           — Pi-hole status + stats
 POST /api/services/pihole/toggle    — Toggle Pi-hole on/off
-GET  /api/services/wireguard  — WireGuard status
+GET  /api/services/wireguard        — WireGuard status
 POST /api/services/wireguard/toggle — Toggle WireGuard on/off
 ```
 
 ### Known Issues / Gotchas
-- Pi-hole v6 API format may differ from v5 (stats endpoint changed)
+- Pi-hole v6 API format changed from v5 — stats endpoint needs fixing
 - WiFi scan requires sudo iwlist — works because gunicorn runs as root
 - WebSocket upgrade headers in nginx caused connection hanging — removed
 - gunicorn eventlet worker incompatible with Python 3.13 — use gevent instead
@@ -251,17 +267,15 @@ POST /api/services/wireguard/toggle — Toggle WireGuard on/off
 ### Static IP
 Set via NetworkManager (nmcli), NOT dhcpcd.
 Pi OS Bookworm uses NetworkManager by default.
-dhcpcd.conf changes have no effect.
 
 ```bash
 sudo nmcli con mod "$(nmcli -t -f NAME con show --active | head -1)" \
     ipv4.addresses 192.168.0.191/24 \
     ipv4.gateway 192.168.0.1 \
-    ipv4.dns "127.0.0.1,1.1.1.1" \
+    ipv4.dns "1.1.1.1" \
     ipv4.method manual
+sudo nmcli con up "$(nmcli -t -f NAME con show --active | head -1)"
 ```
-
-DNS points to 127.0.0.1 (Pi-hole) with 1.1.1.1 as fallback.
 
 ---
 
@@ -277,78 +291,82 @@ DNS points to 127.0.0.1 (Pi-hole) with 1.1.1.1 as fallback.
    Plain HTTP proxy works fine for current use case.
 
 4. **Pi-hole on port 8080** — Pi-hole v6 runs its own web server.
-   Moved to 8080 so nginx can own port 80.
+   Moved to 8080 so nginx can own port 80. Pi-hole must be set for BOTH
+   IPv4 and IPv6 on 8080 — leaving [::]:80 active blocks nginx for IPv6 clients.
 
 5. **GPIO initialization order** — InputManager must init before DisplayManager.
    Both share GPIO but InputManager sets the mode.
 
 6. **sudo required for launcher** — GPIO/SPI access requires root.
-   Systemd service runs as root.
+   Systemd service runs as root, so ~/waver in updater.py expands to /root/waver.
+   REPO_PATH must be an absolute path: /home/cimi/waver.
 
-7. **Virtual environment** — Pi OS Bookworm enforces externally-managed-environment.
-   All Python packages must be installed in ~/swisspi-env.
+7. **git safe.directory** — Running git as root on a repo owned by cimi requires:
+   `sudo git config --global --add safe.directory /home/cimi/waver`
+
+8. **api/config.py off-repo** — Contains PASSWORD_HASH and SECRET_KEY.
+   Listed in .gitignore and untracked. Template at api/config.example.py.
+   On fresh Pi setup: copy example, fill in hash + secret, never commit.
+
+9. **LCD_X_ADJUST = 1** — On current hardware revision the column offset is 1,
+   not 2 as on the original build. If glitch lines reappear after reinstall,
+   test values 0–4.
 
 ---
 
 ## TODO / Planned Features
 
 ### High Priority
-- [ ] HTTPS with self-signed certificate (openssl + nginx SSL config)
-- [ ] Pi-hole proper DNS setup (configure router to use Pi as DNS)
 - [ ] WireGuard peer configuration (add phone/laptop as peers)
+- [ ] HTTPS with self-signed certificate (openssl + nginx SSL config)
 - [ ] Hotspot/AP fallback mode (hostapd — broadcast own WiFi if no network)
 
 ### Medium Priority
-- [ ] TOTP authenticator (oathtool or pyotp — store secrets locally)
-- [ ] Network scanner (nmap wrapper with results on LCD/dashboard)
-- [ ] WiFi scanner display on LCD (nearby networks + signal strength)
-- [ ] Dashboard UI improvements (better layout, mobile support)
 - [ ] Pi-hole stats on dashboard (fix API — v6 format changed)
+- [ ] TOTP authenticator (pyotp — store secrets locally, generate codes on LCD)
+- [ ] Network scanner (nmap wrapper with results on LCD + dashboard)
+- [ ] Dashboard UI improvements (mobile layout)
 
 ### Low Priority / Future
+- [ ] Terminal screen on LCD (shown in design mockup)
 - [ ] USB HID gadget mode (Rubber Ducky payloads via USB)
-- [ ] Wardriving logger (requires GPS module)
-- [ ] Tailscale as alternative to WireGuard
 - [ ] Packet sniffer (tcpdump wrapper)
-- [ ] E-ink display integration (secondary display for idle/status)
-- [ ] HTTPS for web dashboard
+- [ ] Tailscale as alternative to WireGuard
+- [ ] Wardriving logger (requires GPS module)
 
 ---
 
 ## Useful Commands
 
 ```bash
-# Start launcher manually
-cd ~/swisspi/launcher && sudo ~/swisspi-env/bin/python3 launcher.py
-
 # Check all service statuses
-systemctl is-active pihole-FTL wg-quick@wg0 nginx swisspi swisspi-api
+systemctl is-active pihole-FTL wg-quick@wg0 nginx waver waver-api
 
 # View API logs
-sudo journalctl -u swisspi-api -f
+sudo journalctl -u waver-api -f
 
 # View launcher logs
-sudo journalctl -u swisspi -f
+sudo journalctl -u waver -f
 
-# Restart all SwissPI services
-sudo systemctl restart swisspi swisspi-api nginx pihole-FTL
+# Restart all WAVER services
+sudo systemctl restart waver waver-api nginx pihole-FTL
 
-# Test API
+# Test API login
 curl http://192.168.0.191/api/auth/login \
   -X POST -H "Content-Type: application/json" \
   -d '{"password": "yourpassword"}'
 
-# Check what's on port 80/8080
-sudo ss -tlnp | grep -E ':80|:8080'
-
-# Check Pi-hole version
-pihole -v
+# Check port bindings
+sudo ss -tlnp | grep -E ':80|:5000|:8080'
 
 # Check Pi temperature
 vcgencmd measure_temp
 
 # Check WiFi signal
 iwconfig wlan0 | grep "Signal level"
+
+# Run simulator (Mac)
+cd ~/Documents/Waver && .venv/bin/python3 simulator/run_sim.py
 ```
 
 ---
