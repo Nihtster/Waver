@@ -42,6 +42,7 @@ waver/
 │   ├── st7735_fixed.py      # Custom ST7735S raw SPI driver
 │   ├── input_manager.py     # GPIO button and joystick polling (threaded)
 │   ├── service_manager.py   # systemd service control
+│   ├── hotspot_manager.py   # WiFi hotspot toggle (NetworkManager)
 │   ├── network_info.py      # Live network data (IP, signal, temp, Pi-hole)
 │   └── updater.py           # OTA git pull and service restart
 ├── api/
@@ -56,7 +57,11 @@ waver/
 │   ├── nginx/waver.conf          # nginx reverse proxy config
 │   ├── systemd/waver.service     # LCD launcher systemd unit
 │   ├── systemd/waver-api.service # Flask API systemd unit
-│   └── wg0.conf.template         # WireGuard config template
+│   ├── wg0.conf.template         # WireGuard config template
+│   └── scripts/                  # One-time setup + runtime helpers
+│       ├── gen-cert.sh           # Self-signed TLS cert generator
+│       ├── setup-hotspot.py      # NetworkManager hotspot profile creator
+│       └── hotspot.sh            # Hotspot start/stop/status
 └── simulator/               # Local dev simulator (pygame, no Pi required)
 ```
 
@@ -100,4 +105,5 @@ waver/
 | [Dashboard](docs/dashboard.md) | Web dashboard, nginx reverse proxy |
 | [Pi-hole](docs/pihole.md) | Install, port config, DNS setup |
 | [WireGuard](docs/wireguard.md) | Install, key generation, peer config |
+| [Hotspot](docs/hotspot.md) | On-device WiFi AP — setup, toggle, troubleshooting |
 | [Simulator](docs/simulator.md) | Running the local dev simulator on macOS |

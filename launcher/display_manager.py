@@ -324,6 +324,35 @@ class DisplayManager:
             _footer(draw, action)
             self._push(img)
 
+    # ── HOTSPOT ───────────────────────────────────────────────────────────────
+
+    def draw_hotspot(self, status="inactive", ssid="Waver", password=""):
+        with self.lock:
+            img, draw = self._frame()
+            _status_bar(draw)
+            _divider(draw, 14)
+
+            h_color = GREEN if status == "active" else GRAY
+            _dot(draw, 8, 24, 4, h_color)
+            _text(draw, (18, 16), "Hotspot", size=11, fill=CYAN)
+            _text(draw, (18, 29), "Active" if status == "active" else "Inactive", size=9, fill=h_color)
+
+            _divider(draw, 42)
+
+            _text(draw, (4, 45), "SSID", size=9, fill=DIM_WHITE)
+            _text(draw, (4, 57), (ssid or "Waver")[:17], size=11, fill=WHITE)
+
+            _divider(draw, 72)
+
+            _text(draw, (4, 75), "Password", size=9, fill=DIM_WHITE)
+            pw_text = (password or "—")[:17] if password else "—"
+            pw_color = WHITE if password else GRAY
+            _text(draw, (4, 88), pw_text, size=10, fill=pw_color)
+
+            action = "Stop" if status == "active" else "Start"
+            _footer(draw, action)
+            self._push(img)
+
     # ── WIFI SCAN ─────────────────────────────────────────────────────────────
 
     def draw_wifi_scan(self, networks, selected_index=0):

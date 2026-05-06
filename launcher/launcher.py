@@ -11,6 +11,7 @@ HOME        = "home"
 TOOLS       = "tools"
 PIHOLE      = "pihole"
 WIREGUARD   = "wireguard"
+HOTSPOT     = "hotspot"
 WIFI_SCAN   = "wifi_scan"
 WIFI_KIT    = "wifi_toolkit"
 DASHBOARD   = "dashboard"
@@ -19,7 +20,7 @@ UPDATE      = "update"
 ABOUT       = "about"
 PLACEHOLDER = "placeholder"
 
-_SETTINGS_ITEMS = ["WiFi", "Display", "Check Update", "About"]
+_SETTINGS_ITEMS = ["Hotspot", "WiFi", "Display", "Check Update", "About"]
 
 
 class Launcher:
@@ -28,6 +29,7 @@ class Launcher:
         display_backend=None,
         input_backend=None,
         service_backend=None,
+        hotspot_backend=None,
         network_fn=None,
         updater=None,
         stop_event=None,
@@ -43,6 +45,12 @@ class Launcher:
         else:
             from service_manager import ServiceManager
             self.services = ServiceManager()
+
+        if hotspot_backend is not None:
+            self.hotspot = hotspot_backend
+        else:
+            from hotspot_manager import HotspotManager
+            self.hotspot = HotspotManager()
 
         if network_fn is not None:
             self.get_network = network_fn
@@ -107,6 +115,13 @@ class Launcher:
                 endpoint=wg.get("endpoint", ""),
                 rx=wg.get("rx", "0"),
                 tx=wg.get("tx", "0"),
+            )
+
+        elif self.screen == HOTSPOT:
+            self.display.draw_hotspot(
+                status=self._hotspot_status(),
+                ssid=self.hotspot.ssid,
+                password=self.hotspot.password,
             )
 
         elif self.screen == WIFI_SCAN:
@@ -208,6 +223,8 @@ class Launcher:
                 self._run_update()
             elif label == "About":
                 self._goto(ABOUT)
+            elif label == "Hotspot":
+                self._goto(HOTSPOT)
             else:
                 self._placeholder_title = label
                 self._goto(PLACEHOLDER)
@@ -222,10 +239,17 @@ class Launcher:
             self.services.toggle("wireguard")
             time.sleep(0.5)
 
+        elif self.screen == HOTSPOT:
+            self.display.draw_status(["Toggling...", "Hotspot"])
+            self.hotspot.toggle()
+            time.sleep(0.5)
+
     def _back(self):
         if self.screen == HOME:
             return
-        if self.screen in (PIHOLE, WIREGUARD, WIFI_KIT, ABOUT, DASHBOARD, PLACEHOLDER, SETTINGS):
+        if self.screen == HOTSPOT:
+            self._goto(SETTINGS)
+        elif self.screen in (PIHOLE, WIREGUARD, WIFI_KIT, ABOUT, DASHBOARD, PLACEHOLDER, SETTINGS):
             self._goto(TOOLS)
         elif self.screen == WIFI_SCAN:
             self._goto(WIFI_KIT)
@@ -293,6 +317,10 @@ class Launcher:
 
     def _svc(self, key):
         status = self.services.get_status(key)
+        return status.value if hasattr(status, "value") else str(status).lower()
+
+    def _hotspot_status(self):
+        status = self.hotspot.get_status()
         return status.value if hasattr(status, "value") else str(status).lower()
 
     def _build_tools_items(self):

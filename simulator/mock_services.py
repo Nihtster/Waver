@@ -45,3 +45,28 @@ class MockServiceManager:
             self._states[service_key] = "inactive"
             return True
         return False
+
+
+class MockHotspotManager:
+    """In-memory mock of HotspotManager — same surface (ssid/password/get_status/toggle)."""
+
+    def __init__(self, ssid="Waver", password="hunter2!"):
+        self.ssid     = ssid
+        self.password = password
+        self._active  = False
+
+    def get_status(self):
+        return "active" if self._active else "inactive"
+
+    def start(self):
+        self._active = True
+        print("[mock] hotspot: → active")
+        return self.get_status()
+
+    def stop(self):
+        self._active = False
+        print("[mock] hotspot: → inactive")
+        return self.get_status()
+
+    def toggle(self):
+        return self.stop() if self._active else self.start()

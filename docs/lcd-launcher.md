@@ -34,11 +34,12 @@ pull-ups (active low).
 | `HOME`        | WAVER logo, live Pi-hole / WireGuard status            |
 | `TOOLS`       | Top-level menu — entry point for everything            |
 | `PIHOLE`      | Pi-hole status, blocked-today count, top domain        |
+| `HOTSPOT`     | AP toggle screen — SSID, password, status              |
 | `WIREGUARD`   | WireGuard status, endpoint, RX/TX counters             |
 | `WIFI_KIT`    | WiFi sub-menu (Scan, Deauth, Capture, Evil Twin)       |
 | `WIFI_SCAN`   | Live list of nearby WiFi networks                      |
 | `DASHBOARD`   | CPU / memory / uptime / client count                   |
-| `SETTINGS`    | WiFi, Display, Check Update, About                     |
+| `SETTINGS`    | Hotspot, WiFi, Display, Check Update, About            |
 | `UPDATE`      | OTA update flow (blocking)                             |
 | `ABOUT`       | Version and credits                                    |
 | `PLACEHOLDER` | Stub for unimplemented features                        |

@@ -85,12 +85,13 @@ def main():
     # Load simulator backends (never unloaded / reloaded)
     from sim_display   import SimDisplay
     from sim_input     import SimInput
-    from mock_services import MockServiceManager
+    from mock_services import MockServiceManager, MockHotspotManager
     from mock_network  import mock_get_network
     import mock_updater
 
-    sim_display = SimDisplay(window, scale=SCALE, bezel=BEZEL)
-    mock_svc    = MockServiceManager()   # persists state across hot-reloads
+    sim_display  = SimDisplay(window, scale=SCALE, bezel=BEZEL)
+    mock_svc     = MockServiceManager()    # persists state across hot-reloads
+    mock_hotspot = MockHotspotManager()    # ditto
 
     print(f"[sim] WAVER simulator starting  (window {WIN_W}×{WIN_H})")
     print(f"[sim] watching: {LAUNCHER_DIR}")
@@ -113,6 +114,7 @@ def main():
             display_backend=sim_display,
             input_backend=sim_input,
             service_backend=mock_svc,
+            hotspot_backend=mock_hotspot,
             network_fn=mock_get_network,
             updater=mock_updater,
             stop_event=stop_event,

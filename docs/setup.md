@@ -125,6 +125,9 @@ Edit `~/waver/api/config.py`:
 
 - `PASSWORD_HASH` — paste the generated hash
 - `SECRET_KEY` — random string (mash the keyboard)
+- `PIHOLE_APP_PASSWORD` — see [pihole.md](pihole.md#generating-the-api-credential)
+- `HOTSPOT_PASSWORD` — pick a WPA2 password (min 8 chars) for the
+  device's hotspot. See [hotspot.md](hotspot.md).
 
 `api/config.py` is in `.gitignore`. Never commit it.
 
@@ -183,7 +186,25 @@ on port 80 redirects automatically.
 
 ---
 
-## 11. Verify
+## 11. WiFi hotspot
+
+One-time setup for the on-device hotspot. Creates a NetworkManager
+connection profile that doesn't auto-activate; the launcher toggles it
+on demand from Settings → Hotspot.
+
+```bash
+sudo ~/waver-env/bin/python3 ~/waver/config/scripts/setup-hotspot.py
+```
+
+This reads `HOTSPOT_SSID` and `HOTSPOT_PASSWORD` from `api/config.py`
+and creates a profile named `waver-hotspot`. Re-run any time to recreate
+(idempotent).
+
+Full guide in [hotspot.md](hotspot.md).
+
+---
+
+## 12. Verify
 
 ```bash
 systemctl is-active waver waver-api nginx

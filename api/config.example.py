@@ -34,3 +34,9 @@ NETWORK_INTERFACE = "wlan0"
 
 # Static IP address
 STATIC_IP = "192.168.0.191"
+
+# WiFi hotspot — broadcast when AP mode is enabled (Settings -> Hotspot)
+# After setting these, run once to create the NetworkManager profile:
+#   sudo ~/waver-env/bin/python3 ~/waver/config/scripts/setup-hotspot.py
+HOTSPOT_SSID     = "Waver"
+HOTSPOT_PASSWORD = "REPLACE_WITH_HOTSPOT_PASSWORD"   # WPA2, min 8 chars
