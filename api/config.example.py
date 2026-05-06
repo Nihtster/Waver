@@ -4,8 +4,7 @@ WAVER API Configuration
 
 SETUP INSTRUCTIONS:
 1. Generate a bcrypt password hash:
-   source ~/swisspi-env/bin/activate
-   python3 -c "import bcrypt; p=input('Password: ').encode(); print(bcrypt.hashpw(p, bcrypt.gensalt()).decode())"
+   ~/waver-env/bin/python3 -c "import bcrypt; p=input('Password: ').encode(); print(bcrypt.hashpw(p, bcrypt.gensalt()).decode())"
 
 2. Paste the hash into PASSWORD_HASH below
 
