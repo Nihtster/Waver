@@ -64,7 +64,28 @@ waver/
 
 ## Roadmap
 
-*To be detailed — see [docs/roadmap.md](docs/roadmap.md).*
+### Phase 1 — QoL for daily use
+- [ ] HTTPS on the dashboard
+- [ ] AP fallback mode
+- [ ] Pi-hole, fully working
+- [ ] WireGuard, on the go
+
+### Phase 2 — WiFi Toolkit
+- [ ] Scanning
+- [ ] Packet capture
+- [ ] Deauth
+
+### Phase 3 — Pwnagotchi
+- [ ] Passive handshake collection
+- [ ] On-LCD personality / status
+- [ ] Captured handshakes accessible from the dashboard
+
+### Phase 4 — Future task bucket
+- [ ] Settings overhaul
+- [ ] Dashboard overhaul
+- [ ] UI pass
+- [ ] Battery support
+- [ ] One more "fun tool"
 
 ---
 
