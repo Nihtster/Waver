@@ -13,12 +13,19 @@ import json
 import os
 import time
 from datetime import datetime, timedelta
-from config import PASSWORD_HASH, SECRET_KEY, PIHOLE_API, WG_INTERFACE, NETWORK_INTERFACE
+from config import (
+    PASSWORD_HASH, SECRET_KEY,
+    PIHOLE_API, PIHOLE_APP_PASSWORD,
+    WG_INTERFACE, NETWORK_INTERFACE,
+)
+from pihole_client import PiholeClient
 
 app = Flask(__name__, static_folder='../dashboard')
 app.config['SECRET_KEY'] = SECRET_KEY
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+pihole = PiholeClient(PIHOLE_API, PIHOLE_APP_PASSWORD)
 
 # ============ HELPERS ============
 
@@ -204,24 +211,9 @@ def pihole_status():
     if not verify_token(get_auth_token()):
         return jsonify({'error': 'Unauthorized'}), 401
 
-    is_active = get_service_status("pihole-FTL")
-
-    stats = {'queries': 0, 'blocked': 0, 'percent': 0}
-    try:
-        result = run_cmd(["curl", "-s", PIHOLE_API], timeout=3)
-        if result:
-            data = json.loads(result)
-            stats = {
-                'queries': data.get('dns_queries_today', 0),
-                'blocked': data.get('ads_blocked_today', 0),
-                'percent': round(float(data.get('ads_percentage_today', 0)), 1)
-            }
-    except:
-        pass
-
     return jsonify({
-        'active': is_active,
-        'stats': stats
+        'active': get_service_status("pihole-FTL"),
+        'stats': pihole.get_stats_summary(),
     })
 
 @app.route('/api/services/pihole/toggle', methods=['POST'])

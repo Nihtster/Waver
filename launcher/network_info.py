@@ -4,8 +4,24 @@ Network info module for WAVER launcher
 Pulls live data: IP, WiFi signal, uptime, CPU temp, Pi-hole stats
 """
 
+import os
+import sys
 import subprocess
 import json
+
+# Reach into ../api so launcher and dashboard share one Pi-hole client +
+# one credential source. If the api dir or config.py isn't there
+# (e.g. fresh checkout that hasn't run setup), fall back to zeros.
+_API_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "api")
+if _API_DIR not in sys.path:
+    sys.path.insert(0, _API_DIR)
+
+try:
+    from pihole_client import PiholeClient
+    from config import PIHOLE_API, PIHOLE_APP_PASSWORD
+    _pihole = PiholeClient(PIHOLE_API, PIHOLE_APP_PASSWORD)
+except (ImportError, AttributeError):
+    _pihole = None
 
 
 def get_ip():
@@ -36,20 +52,10 @@ def get_wifi_signal():
 
 
 def get_pihole_stats():
-    """Get Pi-hole statistics from its local API"""
-    try:
-        result = subprocess.run(
-            ["curl", "-s", "http://localhost/admin/api.php"],
-            capture_output=True, text=True, timeout=3
-        )
-        data = json.loads(result.stdout)
-        return {
-            "queries": data.get("dns_queries_today", 0),
-            "blocked": data.get("ads_blocked_today", 0),
-            "percent": round(float(data.get("ads_percentage_today", 0)), 1)
-        }
-    except:
+    """Get Pi-hole statistics via the shared v6 API client."""
+    if _pihole is None:
         return {"queries": 0, "blocked": 0, "percent": 0}
+    return _pihole.get_stats_summary()
 
 
 def get_uptime():

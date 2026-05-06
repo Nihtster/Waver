@@ -17,8 +17,14 @@ PASSWORD_HASH = "REPLACE_WITH_YOUR_BCRYPT_HASH"
 # JWT secret key - make this random and keep it secret
 SECRET_KEY = "REPLACE_WITH_RANDOM_SECRET"
 
-# Pi-hole settings (v6 runs on port 8080)
-PIHOLE_API = "http://localhost:8080/admin/api.php"
+# Pi-hole v6 API
+# Base URL of the Pi-hole API (no trailing slash)
+PIHOLE_API = "http://localhost:8080/api"
+
+# Application password for Pi-hole API access
+# Generate at: http://<pi-ip>:8080/admin/settings/api -> Expert mode
+#              -> Advanced Settings -> Configure app password
+PIHOLE_APP_PASSWORD = "REPLACE_WITH_PIHOLE_APP_PASSWORD"
 
 # WireGuard interface name
 WG_INTERFACE = "wg0"
