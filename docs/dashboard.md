@@ -93,9 +93,14 @@ sometimes per-app on Android.
 ## Reverse proxy
 
 nginx terminates HTTPS on port 443 and proxies everything to Flask on
-`127.0.0.1:5000`. A second `location` block proxies `/pihole/` to the
-Pi-hole admin UI on port 8080. Plain HTTP on `:80` issues a 301 redirect
-to HTTPS.
+`127.0.0.1:5000`. Plain HTTP on `:80` issues a 301 redirect to HTTPS.
+
+Pi-hole admin runs on its own port (`:8080`) and is **not** proxied
+through nginx — reverse-proxying Pi-hole at a sub-path requires
+Pi-hole-side `webhome` config and isn't worth the maintenance burden.
+The dashboard's "Open Pi-hole Admin" button links to `:8080` directly,
+using `window.location.hostname` so it works whether you're on LAN,
+mDNS, or via WireGuard.
 
 [config/nginx/waver.conf](../config/nginx/waver.conf):
 
@@ -125,12 +130,6 @@ server {
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-
-    location /pihole/ {
-        proxy_pass http://127.0.0.1:8080/;
-        proxy_set_header Host              $host;
         proxy_set_header X-Forwarded-Proto https;
     }
 }

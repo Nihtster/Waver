@@ -3,6 +3,14 @@ let token = localStorage.getItem('waver_token');
 let selectedSSID = null;
 
 window.onload = () => {
+    // Pi-hole admin lives on its own port (8080) and isn't proxied — build
+    // the link from whichever host the dashboard was reached from so it
+    // works on LAN, mDNS, and over WireGuard alike.
+    const piholeLink = document.getElementById('pihole-admin-link');
+    if (piholeLink) {
+        piholeLink.href = `http://${window.location.hostname}:8080/admin/`;
+    }
+
     if (token) {
         showDashboard();
         loadAll();

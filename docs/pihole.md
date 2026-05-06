@@ -45,23 +45,12 @@ Restart:
 sudo systemctl restart pihole-FTL
 ```
 
-The admin UI is now at `http://192.168.0.191:8080/admin`.
-
----
-
-## nginx reverse proxy
-
-`config/nginx/waver.conf` already has the rule:
-
-```nginx
-location /pihole/ {
-    proxy_pass http://127.0.0.1:8080/;
-    proxy_set_header Host $host;
-}
-```
-
-So the admin UI is also reachable at `http://192.168.0.191/pihole/admin`,
-which is convenient if you only want one bookmark.
+The admin UI is at `http://<pi-host>:8080/admin/` — reach it directly,
+not through Waver's nginx. Pi-hole's admin is hard to reverse-proxy at a
+sub-path without configuring Pi-hole's `webhome` setting, and the win
+isn't worth the maintenance burden. The Waver dashboard's "Open Pi-hole
+Admin" button links to `:8080` directly, building the URL from
+`window.location.hostname` so it works on LAN, mDNS, or over WireGuard.
 
 ---
 
