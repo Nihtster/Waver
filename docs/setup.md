@@ -141,7 +141,28 @@ sudo systemctl enable --now waver waver-api
 
 ---
 
-## 8. nginx
+## 8. TLS certificate
+
+The dashboard runs over HTTPS. Generate a self-signed certificate:
+
+```bash
+sudo bash ~/waver/config/scripts/gen-cert.sh
+```
+
+Outputs `/etc/ssl/waver/waver.crt` + `/etc/ssl/waver/waver.key`. The cert
+covers `waver`, `waver.local`, `localhost`, `127.0.0.1`, `192.168.0.191`,
+and `10.0.0.1` (WireGuard) for 10 years.
+
+Browsers will warn on first connect — the cert is self-signed. Either
+click through the warning, or trust the cert per-device once. See
+[dashboard.md](dashboard.md#https) for the trust-the-cert flow.
+
+If your LAN IP differs from `192.168.0.191`, edit the SAN list in
+`gen-cert.sh` before running, or re-run with `--force` after editing.
+
+---
+
+## 9. nginx
 
 ```bash
 sudo cp ~/waver/config/nginx/waver.conf /etc/nginx/sites-available/waver
@@ -150,24 +171,27 @@ sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl restart nginx
 ```
 
-The dashboard is now reachable at `http://192.168.0.191/`.
+The dashboard is now reachable at `https://192.168.0.191/`. Plain HTTP
+on port 80 redirects automatically.
 
 ---
 
-## 9. Optional services
+## 10. Optional services
 
 - [Pi-hole](pihole.md) — moved to port 8080 so nginx can own port 80
 - [WireGuard](wireguard.md) — server config + peer setup
 
 ---
 
-## 10. Verify
+## 11. Verify
 
 ```bash
 systemctl is-active waver waver-api nginx
-curl -s http://192.168.0.191/api/auth/login \
+curl -sk https://192.168.0.191/api/auth/login \
     -X POST -H "Content-Type: application/json" \
     -d '{"password":"yourpassword"}'
 ```
+
+(`-k` skips cert verification — expected for self-signed.)
 
 The LCD should now show the WAVER home screen on boot.
