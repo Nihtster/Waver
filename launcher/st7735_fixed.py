@@ -4,7 +4,7 @@ ST7735S display driver based directly on Waveshare's official code.
 Bypasses luma's display method entirely.
 
 Key offsets for Waveshare 1.44" LCD HAT (128x128):
-  LCD_X_ADJUST = 2  (column offset)
+  LCD_X_ADJUST = 1  (column offset)
   LCD_Y_ADJUST = 2  (row offset)
 
 These are applied on every draw call to account for the ST7735S
@@ -23,7 +23,7 @@ RST_PIN = 27
 BL_PIN  = 24
 
 # Waveshare 1.44" offsets (discovered through testing)
-LCD_X_ADJUST = 2
+LCD_X_ADJUST = 1
 LCD_Y_ADJUST = 2
 LCD_WIDTH    = 128
 LCD_HEIGHT   = 128
