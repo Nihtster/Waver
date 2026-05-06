@@ -1,7 +1,12 @@
 # Pi-hole
 
-Pi-hole runs alongside Waver to provide network-wide DNS ad and tracker
-blocking. Waver toggles it via systemd and surfaces stats on both the LCD
+Pi-hole runs alongside Waver as a portable, on-device DNS ad and tracker
+blocker. Because Waver is meant to travel with you, the design is
+**Pi-only** for DNS: the Pi uses its own Pi-hole as resolver, and clients
+get filtering by tunnelling through Waver's WireGuard (rather than by
+reconfiguring whatever LAN you happen to be on).
+
+Waver toggles the daemon via systemd and surfaces stats on both the LCD
 and the dashboard.
 
 ---
@@ -62,16 +67,45 @@ which is convenient if you only want one bookmark.
 
 ## DNS configuration
 
-Point your router's DHCP server at `192.168.0.191` as the primary DNS to
-hand out Pi-hole DNS to the whole network. Or set per-device — the Pi
-itself, your phone, your laptop.
+The Pi resolves through its own Pi-hole. Set via NetworkManager (Pi OS
+Bookworm uses NM, not dhcpcd):
+
+```bash
+CON=$(nmcli -t -f NAME con show --active | head -1)
+sudo nmcli con mod "$CON" \
+    ipv4.dns "127.0.0.1" \
+    ipv4.ignore-auto-dns yes
+sudo nmcli con up "$CON"
+```
 
 Verify:
 
 ```bash
-dig @192.168.0.191 doubleclick.net
-# → should return 0.0.0.0
+dig @127.0.0.1 doubleclick.net +short
+# → 0.0.0.0   (Pi-hole blocking)
+dig @127.0.0.1 google.com +short
+# → real IPs  (Pi-hole forwarding upstream)
 ```
+
+### How clients get Pi-hole filtering
+
+Waver is a portable device — its `wlan0` IP keeps changing as you move
+networks, so configuring the LAN's DHCP server to point at it is not the
+right model. Instead, clients get filtering through **WireGuard**:
+
+1. The phone or laptop connects to Waver's WireGuard tunnel.
+2. The peer config includes `DNS = 10.0.0.1` (Waver's wg0 address).
+3. With `AllowedIPs = 0.0.0.0/0`, all client traffic — including DNS —
+   routes through Waver, hits Pi-hole, and gets filtered.
+
+Result: Pi-hole filtering wherever the Pi has internet, with no
+LAN-side configuration needed. See [wireguard.md](wireguard.md) for the
+peer flow.
+
+> **Pi-hole listening mode for WireGuard:** when WG peers are added,
+> `pihole.toml` → `dns.listeningMode` must be `ALL` (not the default
+> `LOCAL`). Otherwise queries arriving on `10.0.0.0/24` from a different
+> subnet than `wlan0`'s are silently dropped.
 
 ---
 
@@ -89,29 +123,50 @@ sudo journalctl -u pihole-FTL -f
 
 ---
 
-## Stats integration — known issue
+## Stats integration (v6 API)
 
-Both [api/app.py](../api/app.py:202) and
-[network_info.py](../launcher/network_info.py:38) still hit the v5 endpoint:
+The dashboard and LCD pull stats through the v6 REST API, which is
+session-authenticated. All of the auth dance lives in
+[api/pihole_client.py](../api/pihole_client.py) and is shared by both
+[api/app.py](../api/app.py) (dashboard) and
+[launcher/network_info.py](../launcher/network_info.py) (LCD).
 
+### Generating the API credential
+
+Use a Pi-hole **application password**, not your admin password — it's
+revocable independently and avoids storing the admin login in
+`api/config.py`.
+
+1. Open the admin UI: `http://192.168.0.191:8080/admin/settings/api`
+2. Toggle the top-right switch from **Basic** to **Expert**
+3. In *Advanced Settings*, click **Configure app password** and generate one
+4. Paste the result into `PIHOLE_APP_PASSWORD` in `api/config.py`
+5. Restart the API: `sudo systemctl restart waver-api`
+
+### How the client works
+
+```python
+PiholeClient(base_url, app_password).get_stats_summary()
+# → {"queries": int, "blocked": int, "percent": float}
 ```
-http://localhost/admin/api.php?summaryRaw
-```
 
-Pi-hole v6 changed this. The new endpoint requires authentication and
-returns a different shape. The current code silently catches the parse
-error and returns zeros, which is why the dashboard's stats card shows
-`0 / 0 / 0%` and the LCD's "Blocked Today" shows 0.
+Internally:
 
-Fix path:
+1. `POST /api/auth` with `{password}` → returns a session ID
+2. `GET /api/stats/summary` with `X-FTL-SID: <sid>` header → returns
+   the v6 stats blob
+3. Maps `queries.total` / `queries.blocked` / `queries.percent_blocked`
+   onto Waver's existing `{queries, blocked, percent}` contract
 
-1. Generate an app password in the Pi-hole admin → Settings → API
-2. Auth via `POST /api/auth` to get a session ID
-3. Hit `GET /api/stats/summary` with `sid=<session>`
-4. Map `queries.total`, `queries.blocked`, `queries.percent_blocked` to the
-   existing `{queries, blocked, percent}` shape
+The SID is cached in-process. Default v6 session TTL is 30 min — the
+client re-authenticates automatically on a 401 and retries the call once.
 
-This is on the roadmap — medium priority.
+### Adding new endpoints
+
+Pi-hole v6 has many more endpoints (`/api/stats/top_domains`,
+`/api/stats/upstreams`, `/api/queries`, etc.). To pull from any of them,
+add a method on `PiholeClient` that calls `self._get("/some/path")` and
+maps the response. The auth handling is already taken care of.
 
 ---
 
