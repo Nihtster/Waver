@@ -100,6 +100,7 @@ def post_update():
       2. Copy any new/changed systemd units from the repo into /etc/systemd/system/.
       3. daemon-reload + enable units that aren't already enabled.
       4. Install/upgrade Python deps for the rsvp-converter.
+      5. Run setup-terminal.sh (installs fastfetch + btop, writes .bashrc aliases).
     """
     VENV_PIP   = "/home/cimi/waver-env/bin/pip"
     UNITS_SRC  = os.path.join(REPO_PATH, "config", "systemd")
@@ -142,6 +143,14 @@ def post_update():
         subprocess.run(
             [VENV_PIP, "install", "-q", "-r", RSVP_REQS],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
+    # 5. Terminal setup — fastfetch, btop, .bashrc aliases (idempotent)
+    setup_terminal = os.path.join(REPO_PATH, "config", "scripts", "setup-terminal.sh")
+    if os.path.isfile(setup_terminal):
+        subprocess.run(
+            ["bash", setup_terminal],
+            env={**os.environ, "REPO_DIR": REPO_PATH},
         )
 
 
