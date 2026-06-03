@@ -38,10 +38,10 @@ else
     echo "      added dtoverlay=dwc2,dr_mode=peripheral to $BOOT_CONFIG"
 fi
 
-echo "[2/7] Adding dwc2 module to $MODULES_FILE..."
-if ! grep -q "^dwc2" "$MODULES_FILE"; then
-    echo "dwc2" >> "$MODULES_FILE"
-    echo "      added dwc2"
+echo "[2/7] Adding dwc2 module to /etc/modules-load.d/waver-dwc2.conf..."
+if [[ ! -f /etc/modules-load.d/waver-dwc2.conf ]]; then
+    echo "dwc2" > /etc/modules-load.d/waver-dwc2.conf
+    echo "      created /etc/modules-load.d/waver-dwc2.conf"
 else
     echo "      already present — skipped"
 fi
