@@ -500,6 +500,81 @@ class DisplayManager:
 
             self._push(img)
 
+    # ── BOOK SELECT ───────────────────────────────────────────────────────────
+
+    def draw_book_select(self, books, selected_index=0):
+        """books: list of .rsvp filenames — strips extension for display."""
+        with self.lock:
+            img, draw = self._frame()
+            page_items, local_sel, page, total_pages = _list_page(books, selected_index)
+
+            def _row(draw, y, filename, selected):
+                label    = filename[:-5] if filename.endswith(".rsvp") else filename
+                text_col = CYAN if selected else WHITE
+                _text(draw, (10,  y + 7),  label[:15], size=11, fill=text_col)
+                _text(draw, (118, y + 8),  ">",        size=9,  fill=GRAY)
+
+            _draw_list(draw, "Library", page_items, local_sel, page, total_pages, _row)
+            _footer(draw, "Select")
+            self._push(img)
+
+    # ── READER ────────────────────────────────────────────────────────────────
+
+    def draw_reader(self, word, chapter, wpm, playing, progress_pct):
+        """
+        Full-screen RSVP reader.
+        Layout (px):
+          0-13   status bar
+          14     divider
+          15-26  chapter name (small, dim)
+          27     divider
+          28-95  word — large, centered
+          96     divider
+          97-111 progress% | WPM | play symbol
+          112    divider
+          113-127 hint bar
+        """
+        with self.lock:
+            img, draw = self._frame()
+            _status_bar(draw)
+            _divider(draw, 14)
+
+            # Chapter name
+            _text(draw, (4, 16), str(chapter)[:17], size=9, fill=DIM_WHITE)
+            _divider(draw, 27)
+
+            # Word — adaptive size so it always fits within ~120px width
+            word = str(word)
+            wlen = len(word)
+            if wlen <= 3:
+                size, scale = 16, 2
+            elif wlen <= 5:
+                size, scale = 13, 2
+            elif wlen <= 8:
+                size, scale = 11, 2
+            elif wlen <= 13:
+                size, scale = 11, 1
+            else:
+                size, scale = 9, 1
+
+            # Vertically centre in the word zone (28-95 → midpoint 61)
+            word_y = max(28, 61 - (size * scale) // 2)
+            _centered_text(draw, word_y, word, size=size, scale=scale, fill=WHITE)
+
+            _divider(draw, 96)
+
+            # Bottom bar: progress | WPM | play/pause symbol
+            play_sym = ">" if playing else "||"
+            play_col = GREEN if playing else GRAY
+            _text(draw, (4,   100), f"{progress_pct}%", size=9, fill=GRAY)
+            _centered_text(draw,    100, f"{wpm}wpm",   size=9, fill=CYAN)
+            _text(draw, (110, 100), play_sym,            size=9, fill=play_col)
+
+            _divider(draw, 112)
+            _text(draw, (4, 115), "< chap  play  chap >", size=8, fill=GRAY)
+
+            self._push(img)
+
     def clear(self):
         with self.lock:
             self.device.clear()

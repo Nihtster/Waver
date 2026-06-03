@@ -2,9 +2,14 @@
 
 import time
 import threading
+import json
+import os
 
 from display_manager import DisplayManager, GREEN, BLUE, CYAN, GRAY
 from input_manager import InputManager, InputEvent
+
+BOOKS_DIR     = os.environ.get("BOOKS_DIR", "/home/cimi/waver/rsvp-books")
+PROGRESS_FILE = os.path.join(BOOKS_DIR, ".rsvp-progress.json")
 
 # ── Screen identifiers ────────────────────────────────────────────────────────
 HOME        = "home"
@@ -16,6 +21,8 @@ WIFI_SCAN   = "wifi_scan"
 WIFI_KIT    = "wifi_toolkit"
 RSVP_READER = "rsvp_reader"
 USB_MODE    = "usb_mode"
+BOOK_SELECT = "book_select"
+READER      = "reader"
 DASHBOARD   = "dashboard"
 SETTINGS    = "settings"
 UPDATE      = "update"
@@ -75,6 +82,17 @@ class Launcher:
         self._rsvp_items        = ["Library", "Service Status"]
         self._usb_items         = ["Storage Mode", "Tether Mode"]
         self._placeholder_title = "Coming Soon"
+
+        # ── Reader state ──────────────────────────────────────────────────────
+        self._reader_books    = []    # .rsvp filenames in BOOKS_DIR
+        self._reader_book     = None  # currently loaded filename
+        self._reader_title    = ""
+        self._reader_words    = []    # flat word list from parsed .rsvp
+        self._reader_chapters = []    # [(chapter_title, start_word_index)]
+        self._reader_pos      = 0     # current word index
+        self._reader_wpm      = 250
+        self._reader_playing  = False
+        self._reader_last_adv = 0.0   # time.time() of last word advance
 
     # ── Main loop ─────────────────────────────────────────────────────────────
 
@@ -138,6 +156,30 @@ class Launcher:
         elif self.screen == RSVP_READER:
             self.display.draw_wifi_toolkit(self._rsvp_items, self.selected)
 
+        elif self.screen == BOOK_SELECT:
+            self.display.draw_book_select(self._reader_books, self.selected)
+
+        elif self.screen == READER:
+            # Advance word if playing and enough time has elapsed
+            if self._reader_playing and self._reader_words:
+                interval = 60.0 / self._reader_wpm
+                now = time.time()
+                if now - self._reader_last_adv >= interval:
+                    self._reader_pos += 1
+                    self._reader_last_adv = now
+                    if self._reader_pos >= len(self._reader_words):
+                        self._reader_pos = len(self._reader_words) - 1
+                        self._reader_playing = False  # finished
+            word = self._reader_words[self._reader_pos] if self._reader_words else ""
+            pct  = int(100 * self._reader_pos / max(1, len(self._reader_words) - 1))
+            self.display.draw_reader(
+                word=word,
+                chapter=self._current_chapter_title(),
+                wpm=self._reader_wpm,
+                playing=self._reader_playing,
+                progress_pct=pct,
+            )
+
         elif self.screen == USB_MODE:
             storage_active = self._svc("usb-storage") == "active"
             tether_active  = self._svc("usb-tether")  == "active"
@@ -172,10 +214,23 @@ class Launcher:
     # ── Input handling ────────────────────────────────────────────────────────
 
     def _handle_input(self):
-        timeout = 0.1 if self.screen in (HOME, ABOUT) else 0.4
+        if self.screen == READER and self._reader_playing:
+            # Wake up just in time for the next word advance
+            remaining = max(0.02, (60.0 / self._reader_wpm) - (time.time() - self._reader_last_adv))
+            timeout = remaining
+        elif self.screen in (HOME, ABOUT):
+            timeout = 0.1
+        else:
+            timeout = 0.4
+
         event = self.input.get_event(timeout=timeout)
 
         if self.stop_event.is_set() or event is None:
+            return
+
+        # Reader consumes all input so joystick axes aren't hijacked
+        if self.screen == READER:
+            self._handle_reader_input(event)
             return
 
         if event == InputEvent.JOY_UP:
@@ -203,6 +258,8 @@ class Launcher:
             return len(self._rsvp_items)
         if self.screen == USB_MODE:
             return len(self._usb_items)
+        if self.screen == BOOK_SELECT:
+            return len(self._reader_books)
         if self.screen == WIFI_SCAN:
             return len(self.get_network().get("wifi_scan", []))
         if self.screen == SETTINGS:
@@ -241,7 +298,14 @@ class Launcher:
 
         elif self.screen == RSVP_READER:
             label = self._rsvp_items[self.selected]
-            if label == "Service Status":
+            if label == "Library":
+                self._reader_books = self._load_books()
+                if not self._reader_books:
+                    self.display.draw_status(["No books", "Add .rsvp files"])
+                    self.input.get_event(timeout=2)
+                else:
+                    self._goto(BOOK_SELECT)
+            elif label == "Service Status":
                 status = self._svc("rsvp")
                 line = "Active" if status == "active" else "Off"
                 self.display.draw_status(["RSVP Reader", line])
@@ -249,6 +313,25 @@ class Launcher:
             else:
                 self._placeholder_title = label
                 self._goto(PLACEHOLDER)
+
+        elif self.screen == BOOK_SELECT:
+            filename = self._reader_books[self.selected]
+            self.display.draw_status(["Loading...", filename[:14]])
+            try:
+                title, words, chapters = self._load_book(filename)
+                self._reader_book     = filename
+                self._reader_title    = title
+                self._reader_words    = words
+                self._reader_chapters = chapters
+                prog = self._load_progress()
+                saved = prog.get(filename, 0)
+                self._reader_pos     = min(saved, max(0, len(words) - 1))
+                self._reader_playing  = False
+                self._reader_last_adv = time.time()
+                self._goto(READER)
+            except Exception as e:
+                self.display.draw_status(["Load failed", str(e)[:14]])
+                self.input.get_event(timeout=2)
 
         elif self.screen == USB_MODE:
             label = self._usb_items[self.selected]
@@ -293,6 +376,8 @@ class Launcher:
             return
         if self.screen == HOTSPOT:
             self._goto(SETTINGS)
+        elif self.screen == BOOK_SELECT:
+            self._goto(RSVP_READER)
         elif self.screen in (PIHOLE, WIREGUARD, WIFI_KIT, RSVP_READER, USB_MODE, ABOUT, DASHBOARD, PLACEHOLDER, SETTINGS):
             self._goto(TOOLS)
         elif self.screen == WIFI_SCAN:
@@ -382,6 +467,103 @@ class Launcher:
             ("Settings",     "",      CYAN),
             ("About",        "",      CYAN),
         ]
+
+    # ── Reader helpers ────────────────────────────────────────────────────────
+
+    def _load_books(self):
+        try:
+            if not os.path.isdir(BOOKS_DIR):
+                return []
+            return sorted(f for f in os.listdir(BOOKS_DIR) if f.endswith(".rsvp"))
+        except OSError:
+            return []
+
+    def _load_book(self, filename):
+        """Parse a .rsvp file into (title, flat_word_list, chapter_index).
+        chapter_index = [(chapter_title, start_word_index)]."""
+        path = os.path.join(BOOKS_DIR, filename)
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+
+        words    = []
+        chapters = []
+        title    = filename[:-5] if filename.endswith(".rsvp") else filename
+
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("@title "):
+                title = line[7:]
+            elif line.startswith("@chapter "):
+                chapters.append((line[9:], len(words)))
+            elif line.startswith("@"):
+                continue  # @rsvp, @author, @source, @para — skip
+            elif line:
+                words.append(line)
+
+        if not chapters:
+            chapters = [("Book", 0)]
+
+        return title, words, chapters
+
+    def _load_progress(self):
+        try:
+            with open(PROGRESS_FILE, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _save_progress(self):
+        if not self._reader_book:
+            return
+        try:
+            prog = self._load_progress()
+            prog[self._reader_book] = self._reader_pos
+            with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
+                json.dump(prog, f)
+        except OSError:
+            pass
+
+    def _current_chapter_index(self):
+        for i in range(len(self._reader_chapters) - 1, -1, -1):
+            if self._reader_pos >= self._reader_chapters[i][1]:
+                return i
+        return 0
+
+    def _current_chapter_title(self):
+        if not self._reader_chapters:
+            return ""
+        return self._reader_chapters[self._current_chapter_index()][0]
+
+    def _next_chapter(self):
+        ci = self._current_chapter_index()
+        if ci + 1 < len(self._reader_chapters):
+            self._reader_pos      = self._reader_chapters[ci + 1][1]
+            self._reader_last_adv = time.time()
+
+    def _prev_chapter(self):
+        ci = self._current_chapter_index()
+        if ci > 0:
+            self._reader_pos = self._reader_chapters[ci - 1][1]
+        else:
+            self._reader_pos = 0
+        self._reader_last_adv = time.time()
+
+    def _handle_reader_input(self, event):
+        if event in (InputEvent.JOY_PRESS, InputEvent.KEY1):
+            self._reader_playing  = not self._reader_playing
+            self._reader_last_adv = time.time()
+        elif event == InputEvent.JOY_UP:
+            self._reader_wpm = min(self._reader_wpm + 25, 1000)
+        elif event == InputEvent.JOY_DOWN:
+            self._reader_wpm = max(self._reader_wpm - 25, 50)
+        elif event == InputEvent.JOY_RIGHT:
+            self._next_chapter()
+        elif event == InputEvent.JOY_LEFT:
+            self._prev_chapter()
+        elif event == InputEvent.KEY3:
+            self._reader_playing = False
+            self._save_progress()
+            self._goto(BOOK_SELECT)
 
     def _cleanup(self):
         try:
