@@ -116,10 +116,31 @@ def _patch_bashrc():
     repeated OTAs are a no-op.
     """
     # Copy fastfetch config from repo → ~/.config/fastfetch/
+    # Expand ~/waver/ → absolute path so fastfetch can find the logo
+    # (fastfetch does not expand ~ inside JSON values).
     ff_src = os.path.join(REPO_PATH, "config", "fastfetch", "config.jsonc")
     if os.path.isfile(ff_src):
         os.makedirs(os.path.dirname(_FF_CONFIG), exist_ok=True)
-        shutil.copy2(ff_src, _FF_CONFIG)
+        with open(ff_src) as f:
+            content = f.read().replace("~/waver/", f"{REPO_PATH}/")
+        with open(_FF_CONFIG, "w") as f:
+            f.write(content)
+
+    # Write /etc/profile.d entry so fastfetch fires on SSH login shells too.
+    # profile.d is sourced by /etc/profile for every login shell (SSH, tty).
+    profile_d = "/etc/profile.d/waver-fastfetch.sh"
+    if not os.path.isfile(profile_d):
+        try:
+            with open(profile_d, "w") as f:
+                f.write(
+                    "# Waver: show system info on login (SSH + tty)\n"
+                    "case $- in *i*) ;; *) return ;; esac\n"
+                    f'command -v fastfetch >/dev/null 2>&1 && '
+                    f'fastfetch --config "{_FF_CONFIG}"\n'
+                )
+            print("[post-update] /etc/profile.d/waver-fastfetch.sh written.", flush=True)
+        except OSError as e:
+            print(f"[post-update] profile.d write failed: {e}", flush=True)
 
     # Guard: don't patch twice
     try:
