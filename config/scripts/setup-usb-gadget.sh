@@ -15,7 +15,12 @@ set -euo pipefail
 IMAGE=/home/cimi/waver/rsvp-books.img
 IMAGE_SIZE=2048  # MB — adjust to taste (must fit on your SD card)
 BOOKS_DIR=/home/cimi/waver/rsvp-books
-BOOT_CONFIG=/boot/firmware/config.txt
+# Detect which config.txt the bootloader is actually reading
+if [[ -f /boot/config.txt && $(stat -c%s /boot/config.txt) -gt 0 ]]; then
+    BOOT_CONFIG=/boot/config.txt        # Bullseye / legacy boot partition
+else
+    BOOT_CONFIG=/boot/firmware/config.txt  # Bookworm
+fi
 MODULES_FILE=/etc/modules
 SYNC_SCRIPT=/home/cimi/waver/config/scripts/usb-sync.sh
 UDEV_RULE=/etc/udev/rules.d/99-waver-usb.rules
