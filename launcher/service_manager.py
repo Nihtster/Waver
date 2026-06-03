@@ -24,7 +24,7 @@ class ServiceManager:
             "ssh":          "ssh",
             "nginx":        "nginx",
             "rsvp":         "waver-rsvp",
-            "usb-storage":  "waver-usb-gadget",
+            "samba":        "smbd",
             "usb-tether":   "waver-usb-tether",
         }
 

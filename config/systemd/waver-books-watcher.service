@@ -1,0 +1,28 @@
+[Unit]
+Description=WAVER Books watcher — auto-convert new source files via Samba
+After=waver-rsvp.service
+Requires=waver-rsvp.service
+
+[Service]
+User=cimi
+Restart=always
+RestartSec=3
+# Watch for new source files dropped via Samba and trigger auto-convert.
+# inotifywait fires on close_write (file fully written) and moved_to (rename).
+# A short sleep lets the rsvp service finish any prior conversion before
+# the next one starts.
+ExecStart=/bin/bash -c '\
+    inotifywait -m -q -e close_write,moved_to \
+        --format "%%f" \
+        /home/cimi/waver/rsvp-books | \
+    while read fname; do \
+        case "$fname" in \
+            *.epub|*.txt|*.md|*.markdown|*.html|*.htm) \
+                echo "[books-watcher] New file: $fname" ; \
+                sleep 1 ; \
+                curl -sf http://127.0.0.1:5001/convert-pending || true ;; \
+        esac ; \
+    done'
+
+[Install]
+WantedBy=multi-user.target

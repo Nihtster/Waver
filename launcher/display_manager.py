@@ -387,6 +387,46 @@ class DisplayManager:
             _footer(draw, "Select")
             self._push(img)
 
+    # ── USB MODE ──────────────────────────────────────────────────────────────
+
+    def draw_usb_mode(self, samba_active=False, tether_active=False, selected=0):
+        """
+        USB Mode screen — two rows:
+          0: Samba Share  (always-on, shows path; no toggle)
+          1: Tether Mode  (toggleable)
+        """
+        with self.lock:
+            img, draw = self._frame()
+            _status_bar(draw)
+            _divider(draw, 14)
+            _text(draw, (4, 16), "USB Mode", size=11, fill=CYAN)
+            _divider(draw, 29)
+
+            # Row 0 — Samba Share
+            y0 = 32
+            if selected == 0:
+                draw.rectangle([(0, y0), (WIDTH - 1, y0 + 30)], fill=DARK_CYAN)
+            s_color = GREEN if samba_active else GRAY
+            _dot(draw, 8, y0 + 9, 4, s_color)
+            _text(draw, (18, y0 + 1),  "Samba Share", size=11,
+                  fill=CYAN if selected == 0 else WHITE)
+            _text(draw, (18, y0 + 14), "rsvp-books" if samba_active else "Off",
+                  size=9, fill=s_color)
+
+            # Row 1 — Tether Mode
+            y1 = y0 + 34
+            if selected == 1:
+                draw.rectangle([(0, y1), (WIDTH - 1, y1 + 30)], fill=DARK_CYAN)
+            t_color = GREEN if tether_active else GRAY
+            _dot(draw, 8, y1 + 9, 4, t_color)
+            _text(draw, (18, y1 + 1),  "Tether Mode", size=11,
+                  fill=CYAN if selected == 1 else WHITE)
+            _text(draw, (18, y1 + 14), "Active" if tether_active else "Off",
+                  size=9, fill=t_color)
+
+            _footer(draw, "Select / Back")
+            self._push(img)
+
     # ── DASHBOARD ─────────────────────────────────────────────────────────────
 
     def draw_dashboard(self, cpu=0, mem=0, uptime="", clients=0):

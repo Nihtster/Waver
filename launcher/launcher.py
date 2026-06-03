@@ -80,7 +80,7 @@ class Launcher:
         self._tools_items       = self._build_tools_items()
         self._wifi_kit          = ["Scan", "Deauth", "Capture", "Evil Twin"]
         self._rsvp_items        = ["Library", "Service Status"]
-        self._usb_items         = ["Storage Mode", "Tether Mode"]
+        self._usb_items         = ["Samba Share", "Tether Mode"]
         self._placeholder_title = "Coming Soon"
 
         # ── Reader state ──────────────────────────────────────────────────────
@@ -181,13 +181,13 @@ class Launcher:
             )
 
         elif self.screen == USB_MODE:
-            storage_active = self._svc("usb-storage") == "active"
-            tether_active  = self._svc("usb-tether")  == "active"
-            items = [
-                "Storage Mode" + (" [ON]"  if storage_active else ""),
-                "Tether Mode"  + (" [ON]"  if tether_active  else ""),
-            ]
-            self.display.draw_wifi_toolkit(items, self.selected)
+            samba_active  = self._svc("samba")      == "active"
+            tether_active = self._svc("usb-tether") == "active"
+            self.display.draw_usb_mode(
+                samba_active=samba_active,
+                tether_active=tether_active,
+                selected=self.selected,
+            )
 
         elif self.screen == DASHBOARD:
             net = self.get_network()
@@ -335,14 +335,21 @@ class Launcher:
 
         elif self.screen == USB_MODE:
             label = self._usb_items[self.selected]
-            svc   = "usb-storage" if label == "Storage Mode" else "usb-tether"
-            self.display.draw_status(["Switching...", label])
-            self.services.start(svc)   # Conflicts= stops the other automatically
-            time.sleep(1.5)
-            status = self._svc(svc)
-            line   = "Active" if status == "active" else "Failed"
-            self.display.draw_status([label, line])
-            self.input.get_event(timeout=2)
+            if label == "Samba Share":
+                # Samba is always-on — just show share path info
+                samba_active = self._svc("samba") == "active"
+                line = "\\\\waver\\rsvp-books" if samba_active else "smbd not running"
+                self.display.draw_status(["Samba Share", line[:17]])
+                self.input.get_event(timeout=3)
+            else:
+                # Tether Mode — toggle usb-tether
+                self.display.draw_status(["Switching...", "USB Tether"])
+                self.services.toggle("usb-tether")
+                time.sleep(1.5)
+                status = self._svc("usb-tether")
+                line   = "Active" if status == "active" else "Inactive"
+                self.display.draw_status(["USB Tether", line])
+                self.input.get_event(timeout=2)
 
         elif self.screen == SETTINGS:
             label = _SETTINGS_ITEMS[self.selected]
@@ -462,7 +469,7 @@ class Launcher:
             ("WiFi Toolkit", "",      CYAN),
             ("RF Tools",     "",      CYAN),
             ("RSVP Reader",  "Active" if self._svc("rsvp") == "active" else "Off", CYAN),
-            ("USB Mode",     "Tether" if self._svc("usb-tether") == "active" else "Storage", CYAN),
+            ("USB Mode",     "Tether" if self._svc("usb-tether") == "active" else "Samba", CYAN),
             ("Dashboard",    "",      CYAN),
             ("Settings",     "",      CYAN),
             ("About",        "",      CYAN),

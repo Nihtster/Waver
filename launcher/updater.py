@@ -22,6 +22,7 @@ GIT_TIMEOUT       = 30   # seconds per git command
 _BASHRC       = "/home/cimi/.bashrc"
 _FF_CONFIG    = "/home/cimi/.config/fastfetch/config.jsonc"
 _FF_MARKER    = "# waver-fastfetch"
+_SMB_CONF_DST = "/etc/samba/smb.conf"
 
 
 def _git(*args):
@@ -80,7 +81,6 @@ def do_update():
         r = _git("pull", "--ff-only", "--quiet")
         if r.returncode == 0:
             post_update()
-            # Summarise changed files
             changed = _git("diff", "--name-only", "HEAD@{1}", "HEAD")
             files = [l for l in changed.stdout.splitlines() if l.strip()]
             n = len(files)
@@ -109,15 +109,40 @@ def _apt_install(*packages):
                   f"{r.stderr.strip()[:80]}", flush=True)
 
 
+def _setup_samba():
+    """
+    Idempotent: install Samba, deploy smb.conf, enable + start smbd.
+    The smb.conf exposes /home/cimi/waver/rsvp-books as a guest-writable
+    share named 'rsvp-books' — no password, LAN only.
+    """
+    _apt_install("samba", "inotify-tools")
+
+    smb_src = os.path.join(REPO_PATH, "config", "samba", "smb.conf")
+    if os.path.isfile(smb_src):
+        try:
+            with open(smb_src, "rb") as f:
+                src_bytes = f.read()
+            dst_bytes = open(_SMB_CONF_DST, "rb").read() if os.path.exists(_SMB_CONF_DST) else b""
+            if src_bytes != dst_bytes:
+                with open(_SMB_CONF_DST, "wb") as f:
+                    f.write(src_bytes)
+                subprocess.run(["systemctl", "restart", "smbd"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print("[post-update] smb.conf updated, smbd restarted.", flush=True)
+        except OSError as e:
+            print(f"[post-update] Samba config deploy failed: {e}", flush=True)
+
+    for svc in ("smbd", "nmbd"):
+        subprocess.run(["systemctl", "enable", "--now", svc],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def _patch_bashrc():
     """
     Idempotent: copy fastfetch config and append Waver aliases + login
     fastfetch call to /home/cimi/.bashrc. Guarded by _FF_MARKER so
     repeated OTAs are a no-op.
     """
-    # Copy fastfetch config from repo → ~/.config/fastfetch/
-    # Expand ~/waver/ → absolute path so fastfetch can find the logo
-    # (fastfetch does not expand ~ inside JSON values).
     ff_src = os.path.join(REPO_PATH, "config", "fastfetch", "config.jsonc")
     if os.path.isfile(ff_src):
         os.makedirs(os.path.dirname(_FF_CONFIG), exist_ok=True)
@@ -126,8 +151,6 @@ def _patch_bashrc():
         with open(_FF_CONFIG, "w") as f:
             f.write(content)
 
-    # Write /etc/profile.d entry so fastfetch fires on SSH login shells too.
-    # profile.d is sourced by /etc/profile for every login shell (SSH, tty).
     profile_d = "/etc/profile.d/waver-fastfetch.sh"
     if not os.path.isfile(profile_d):
         try:
@@ -142,7 +165,6 @@ def _patch_bashrc():
         except OSError as e:
             print(f"[post-update] profile.d write failed: {e}", flush=True)
 
-    # Guard: don't patch twice
     try:
         with open(_BASHRC) as f:
             if _FF_MARKER in f.read():
@@ -168,27 +190,25 @@ def _patch_bashrc():
 
 def post_update():
     """
-    Idempotent post-pull setup. Safe to run on every update — skips steps
-    that are already done. Handles new services introduced by the pull.
+    Idempotent post-pull setup. Safe to run on every update.
 
     Steps:
       1. Create books directory if missing.
-      2. Copy any new/changed systemd units from the repo into /etc/systemd/system/.
-      3. daemon-reload + enable units that aren't already enabled.
-      4. Install/upgrade Python deps for the rsvp-converter.
-      5. Install fastfetch + btop via apt.
-      6. Copy fastfetch config + patch .bashrc with aliases.
+      2. Sync systemd units from repo → /etc/systemd/system/, reload + enable.
+      3. Install/upgrade Python deps for the rsvp-converter.
+      4. Install fastfetch + btop, patch .bashrc with aliases.
+      5. Install Samba + inotify-tools, deploy smb.conf, enable smbd/nmbd.
     """
-    VENV_PIP   = "/home/cimi/waver-env/bin/pip"
-    UNITS_SRC  = os.path.join(REPO_PATH, "config", "systemd")
-    UNITS_DST  = "/etc/systemd/system"
-    BOOKS_DIR  = "/home/cimi/waver/rsvp-books"
-    RSVP_REQS  = os.path.join(REPO_PATH, "rsvp-converter", "requirements.txt")
+    VENV_PIP  = "/home/cimi/waver-env/bin/pip"
+    UNITS_SRC = os.path.join(REPO_PATH, "config", "systemd")
+    UNITS_DST = "/etc/systemd/system"
+    BOOKS_DIR = "/home/cimi/waver/rsvp-books"
+    RSVP_REQS = os.path.join(REPO_PATH, "rsvp-converter", "requirements.txt")
 
     # 1. Books directory
     os.makedirs(BOOKS_DIR, exist_ok=True)
 
-    # 2. Sync unit files from repo → systemd
+    # 2. Sync unit files — skip tombstone stubs (starts with "# REMOVED")
     new_units = []
     if os.path.isdir(UNITS_SRC):
         for fname in os.listdir(UNITS_SRC):
@@ -199,15 +219,16 @@ def post_update():
             try:
                 with open(src, "rb") as f:
                     src_bytes = f.read()
+                if src_bytes.lstrip().startswith(b"# REMOVED"):
+                    continue  # tombstone — don't deploy
                 dst_bytes = open(dst, "rb").read() if os.path.exists(dst) else b""
                 if src_bytes != dst_bytes:
                     with open(dst, "wb") as f:
                         f.write(src_bytes)
                     new_units.append(fname)
             except OSError:
-                pass  # non-fatal — unit may already be correct
+                pass
 
-    # 3. daemon-reload + enable new/updated units
     if new_units:
         subprocess.run(["systemctl", "daemon-reload"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -215,24 +236,24 @@ def post_update():
             subprocess.run(["systemctl", "enable", unit],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    # 4. Install rsvp-converter deps (pip is a no-op if already satisfied)
+    # 3. Python deps
     if os.path.isfile(RSVP_REQS) and os.path.isfile(VENV_PIP):
         subprocess.run(
             [VENV_PIP, "install", "-q", "-r", RSVP_REQS],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
 
-    # 5. Install terminal tools directly via apt (no sudo needed — waver
-    #    service runs as root or has CAP_NET_ADMIN; apt just needs root)
+    # 4. Terminal tools + aliases
     _apt_install("fastfetch", "btop")
-
-    # 6. Patch .bashrc with fastfetch config + Waver aliases
     _patch_bashrc()
+
+    # 5. Samba share for rsvp-books
+    _setup_samba()
 
 
 def restart_services():
     """
-    Restart systemd services.  Uses Popen so the call returns before
+    Restart systemd services. Uses Popen so the call returns before
     systemd kills this process — the launcher exits cleanly on its own.
     """
     subprocess.Popen(
@@ -240,6 +261,5 @@ def restart_services():
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    # Give systemd a moment to act before we exit
     import time; time.sleep(0.5)
     sys.exit(0)

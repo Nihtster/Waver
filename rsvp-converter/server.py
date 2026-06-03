@@ -128,6 +128,14 @@ def library_delete(filename):
     return jsonify({"deleted": filename})
 
 
+@app.route("/convert-pending", methods=["GET"])
+def convert_pending():
+    """Trigger auto-conversion of any unconverted source files in BOOKS_DIR.
+    Called by waver-books-watcher when new files arrive via Samba."""
+    _auto_convert_pending()
+    return jsonify({"ok": True})
+
+
 _SOURCE_EXTS = {".epub", ".txt", ".md", ".markdown", ".html", ".htm"}
 
 
