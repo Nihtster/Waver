@@ -28,12 +28,14 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-echo "[1/7] Enabling dwc2 USB gadget overlay..."
-if ! grep -q "dtoverlay=dwc2" "$BOOT_CONFIG"; then
-    echo "dtoverlay=dwc2" >> "$BOOT_CONFIG"
-    echo "      added dtoverlay=dwc2 to $BOOT_CONFIG"
+echo "[1/7] Enabling dwc2 USB gadget overlay (peripheral mode)..."
+if grep -q "dtoverlay=dwc2" "$BOOT_CONFIG"; then
+    # Replace any existing dwc2 entry — could be host or missing dr_mode
+    sed -i 's/dtoverlay=dwc2.*/dtoverlay=dwc2,dr_mode=peripheral/' "$BOOT_CONFIG"
+    echo "      updated existing entry to dr_mode=peripheral"
 else
-    echo "      already present — skipped"
+    echo "dtoverlay=dwc2,dr_mode=peripheral" >> "$BOOT_CONFIG"
+    echo "      added dtoverlay=dwc2,dr_mode=peripheral to $BOOT_CONFIG"
 fi
 
 echo "[2/7] Adding dwc2 module to $MODULES_FILE..."
