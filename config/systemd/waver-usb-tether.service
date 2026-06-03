@@ -1,0 +1,25 @@
+[Unit]
+Description=WAVER USB tether mode (g_ether + usb0 @ 192.168.7.2)
+After=local-fs.target
+# Mutually exclusive with storage mode — starting one stops the other.
+Conflicts=waver-usb-gadget.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Load the USB Ethernet gadget driver.
+ExecStart=/sbin/modprobe g_ether
+# Give the kernel a moment to create the usb0 interface.
+ExecStartPost=/bin/sleep 1
+# Assign static IP and bring the interface up.
+# Pi is 192.168.7.2; laptop sets its USB adapter to 192.168.7.1
+# and points DNS at 192.168.7.2 for Pi-hole filtering.
+ExecStartPost=/bin/ip addr flush dev usb0
+ExecStartPost=/bin/ip addr add 192.168.7.2/24 dev usb0
+ExecStartPost=/bin/ip link set usb0 up
+# Tear down cleanly on stop.
+ExecStop=/bin/ip link set usb0 down
+ExecStop=/sbin/modprobe -r g_ether
+
+[Install]
+WantedBy=multi-user.target

@@ -128,6 +128,37 @@ def library_delete(filename):
     return jsonify({"deleted": filename})
 
 
+_SOURCE_EXTS = {".epub", ".txt", ".md", ".markdown", ".html", ".htm"}
+
+
+def _auto_convert_pending():
+    """
+    On startup, scan BOOKS_DIR for source files that have no matching .rsvp.
+    Converts each one in-place. Logs to stdout (captured by journald).
+    Safe to run every restart — skips files whose .rsvp already exists.
+    """
+    _ensure_books_dir()
+    for entry in sorted(os.listdir(BOOKS_DIR)):
+        stem, ext = os.path.splitext(entry)
+        if ext.lower() not in _SOURCE_EXTS:
+            continue
+        src_path  = os.path.join(BOOKS_DIR, entry)
+        out_name  = re.sub(r"[^A-Za-z0-9._-]+", "_", stem + ".rsvp")
+        out_path  = os.path.join(BOOKS_DIR, out_name)
+        if os.path.isfile(out_path):
+            continue  # already converted
+        try:
+            with open(src_path, "rb") as fh:
+                data = fh.read()
+            rsvp_text, _ = converter.convert(entry, data)
+            with open(out_path, "wb") as fh:
+                fh.write(rsvp_text.encode("utf-8"))
+            print(f"[auto-convert] {entry} → {out_name}", flush=True)
+        except Exception as e:
+            print(f"[auto-convert] FAILED {entry}: {e}", flush=True)
+
+
 if __name__ == "__main__":
     _ensure_books_dir()
+    _auto_convert_pending()
     app.run(host=HOST, port=PORT, debug=False)

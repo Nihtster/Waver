@@ -15,7 +15,7 @@ import os
 import sys
 
 REPO_PATH         = "/home/cimi/waver"
-SERVICES_RESTART  = ["waver", "waver-api"]
+SERVICES_RESTART  = ["waver", "waver-api", "waver-rsvp"]
 GIT_TIMEOUT       = 30   # seconds per git command
 
 
@@ -74,6 +74,7 @@ def do_update():
     try:
         r = _git("pull", "--ff-only", "--quiet")
         if r.returncode == 0:
+            post_update()
             # Summarise changed files
             changed = _git("diff", "--name-only", "HEAD@{1}", "HEAD")
             files = [l for l in changed.stdout.splitlines() if l.strip()]
@@ -87,6 +88,61 @@ def do_update():
         return "error", "network timeout"
     except Exception as e:
         return "error", str(e)[:28]
+
+
+def post_update():
+    """
+    Idempotent post-pull setup. Safe to run on every update — skips steps
+    that are already done. Handles new services introduced by the pull.
+
+    Steps:
+      1. Create books directory if missing.
+      2. Copy any new/changed systemd units from the repo into /etc/systemd/system/.
+      3. daemon-reload + enable units that aren't already enabled.
+      4. Install/upgrade Python deps for the rsvp-converter.
+    """
+    VENV_PIP   = "/home/cimi/waver-env/bin/pip"
+    UNITS_SRC  = os.path.join(REPO_PATH, "config", "systemd")
+    UNITS_DST  = "/etc/systemd/system"
+    BOOKS_DIR  = "/home/cimi/waver/rsvp-books"
+    RSVP_REQS  = os.path.join(REPO_PATH, "rsvp-converter", "requirements.txt")
+
+    # 1. Books directory
+    os.makedirs(BOOKS_DIR, exist_ok=True)
+
+    # 2. Sync unit files from repo → systemd
+    new_units = []
+    if os.path.isdir(UNITS_SRC):
+        for fname in os.listdir(UNITS_SRC):
+            if not fname.endswith(".service"):
+                continue
+            src = os.path.join(UNITS_SRC, fname)
+            dst = os.path.join(UNITS_DST, fname)
+            try:
+                with open(src, "rb") as f:
+                    src_bytes = f.read()
+                dst_bytes = open(dst, "rb").read() if os.path.exists(dst) else b""
+                if src_bytes != dst_bytes:
+                    with open(dst, "wb") as f:
+                        f.write(src_bytes)
+                    new_units.append(fname)
+            except OSError:
+                pass  # non-fatal — unit may already be correct
+
+    # 3. daemon-reload + enable new/updated units
+    if new_units:
+        subprocess.run(["systemctl", "daemon-reload"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for unit in new_units:
+            subprocess.run(["systemctl", "enable", unit],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # 4. Install rsvp-converter deps (pip is a no-op if already satisfied)
+    if os.path.isfile(RSVP_REQS) and os.path.isfile(VENV_PIP):
+        subprocess.run(
+            [VENV_PIP, "install", "-q", "-r", RSVP_REQS],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
 
 
 def restart_services():

@@ -15,6 +15,7 @@ HOTSPOT     = "hotspot"
 WIFI_SCAN   = "wifi_scan"
 WIFI_KIT    = "wifi_toolkit"
 RSVP_READER = "rsvp_reader"
+USB_MODE    = "usb_mode"
 DASHBOARD   = "dashboard"
 SETTINGS    = "settings"
 UPDATE      = "update"
@@ -72,6 +73,7 @@ class Launcher:
         self._tools_items       = self._build_tools_items()
         self._wifi_kit          = ["Scan", "Deauth", "Capture", "Evil Twin"]
         self._rsvp_items        = ["Library", "Service Status"]
+        self._usb_items         = ["Storage Mode", "Tether Mode"]
         self._placeholder_title = "Coming Soon"
 
     # ── Main loop ─────────────────────────────────────────────────────────────
@@ -136,6 +138,15 @@ class Launcher:
         elif self.screen == RSVP_READER:
             self.display.draw_wifi_toolkit(self._rsvp_items, self.selected)
 
+        elif self.screen == USB_MODE:
+            storage_active = self._svc("usb-storage") == "active"
+            tether_active  = self._svc("usb-tether")  == "active"
+            items = [
+                "Storage Mode" + (" [ON]"  if storage_active else ""),
+                "Tether Mode"  + (" [ON]"  if tether_active  else ""),
+            ]
+            self.display.draw_wifi_toolkit(items, self.selected)
+
         elif self.screen == DASHBOARD:
             net = self.get_network()
             self.display.draw_dashboard(
@@ -190,6 +201,8 @@ class Launcher:
             return len(self._wifi_kit)
         if self.screen == RSVP_READER:
             return len(self._rsvp_items)
+        if self.screen == USB_MODE:
+            return len(self._usb_items)
         if self.screen == WIFI_SCAN:
             return len(self.get_network().get("wifi_scan", []))
         if self.screen == SETTINGS:
@@ -207,6 +220,7 @@ class Launcher:
                 "WireGuard":    WIREGUARD,
                 "WiFi Toolkit": WIFI_KIT,
                 "RSVP Reader":  RSVP_READER,
+                "USB Mode":     USB_MODE,
                 "Dashboard":    DASHBOARD,
                 "About":        ABOUT,
                 "Settings":     SETTINGS,
@@ -235,6 +249,17 @@ class Launcher:
             else:
                 self._placeholder_title = label
                 self._goto(PLACEHOLDER)
+
+        elif self.screen == USB_MODE:
+            label = self._usb_items[self.selected]
+            svc   = "usb-storage" if label == "Storage Mode" else "usb-tether"
+            self.display.draw_status(["Switching...", label])
+            self.services.start(svc)   # Conflicts= stops the other automatically
+            time.sleep(1.5)
+            status = self._svc(svc)
+            line   = "Active" if status == "active" else "Failed"
+            self.display.draw_status([label, line])
+            self.input.get_event(timeout=2)
 
         elif self.screen == SETTINGS:
             label = _SETTINGS_ITEMS[self.selected]
@@ -268,7 +293,7 @@ class Launcher:
             return
         if self.screen == HOTSPOT:
             self._goto(SETTINGS)
-        elif self.screen in (PIHOLE, WIREGUARD, WIFI_KIT, RSVP_READER, ABOUT, DASHBOARD, PLACEHOLDER, SETTINGS):
+        elif self.screen in (PIHOLE, WIREGUARD, WIFI_KIT, RSVP_READER, USB_MODE, ABOUT, DASHBOARD, PLACEHOLDER, SETTINGS):
             self._goto(TOOLS)
         elif self.screen == WIFI_SCAN:
             self._goto(WIFI_KIT)
@@ -352,6 +377,7 @@ class Launcher:
             ("WiFi Toolkit", "",      CYAN),
             ("RF Tools",     "",      CYAN),
             ("RSVP Reader",  "Active" if self._svc("rsvp") == "active" else "Off", CYAN),
+            ("USB Mode",     "Tether" if self._svc("usb-tether") == "active" else "Storage", CYAN),
             ("Dashboard",    "",      CYAN),
             ("Settings",     "",      CYAN),
             ("About",        "",      CYAN),

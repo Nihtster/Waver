@@ -1,0 +1,20 @@
+[Unit]
+Description=WAVER USB mass storage gadget
+# Must start after the filesystem is up (image file needs to be accessible)
+# and after waver-rsvp so the books dir exists before we expose the drive.
+After=local-fs.target waver-rsvp.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Load g_mass_storage pointing at the FAT32 image.
+# stall=0  — don't stall on USB errors (more compatible with Windows/macOS).
+# ro=0     — read-write so the host can write files onto the drive.
+ExecStart=/sbin/modprobe g_mass_storage \
+    file=/home/cimi/waver/rsvp-books.img \
+    stall=0 \
+    ro=0
+ExecStop=/sbin/modprobe -r g_mass_storage
+
+[Install]
+WantedBy=multi-user.target
