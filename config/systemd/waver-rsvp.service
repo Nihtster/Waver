@@ -1,0 +1,15 @@
+[Unit]
+Description=WAVER RSVP book converter
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/cimi/waver/rsvp-converter
+Environment=BOOKS_DIR=/home/cimi/waver/rsvp-books
+ExecStart=/home/cimi/waver-env/bin/python3 server.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

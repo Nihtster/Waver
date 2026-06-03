@@ -371,6 +371,75 @@ cd ~/Documents/Waver && .venv/bin/python3 simulator/run_sim.py
 
 ---
 
+## Session: RSVP Reader integration (2026-06-01)
+
+### Goal
+Wire [rsvpnano](https://github.com/ionutdecebal/rsvpnano) — an ESP32-S3 RSVP
+e-reader — into Waver as a first-class feature. Waver hosts the book
+conversion pipeline; the firmware itself stays upstream and runs on the
+ESP32. No Docker (Waver is systemd-only).
+
+### What was added
+- **`rsvp-converter/`** — new top-level service.
+  - `converter.py` ports the `.rsvp` text format (header → `@title` →
+    `@author` → `@chapter` → `@para` → one word per line). Supports
+    `.epub` (ebooklib), `.txt` (heuristic chapter regex), `.md`
+    (markdown → html → parse), `.html`/`.htm` (BeautifulSoup + lxml).
+  - `server.py` — Flask app on `127.0.0.1:5001`. Endpoints:
+    `POST /convert`, `GET /library`, `GET /library/<f>`,
+    `DELETE /library/<f>`, `GET /health`.
+  - `requirements.txt` — flask, ebooklib, beautifulsoup4, lxml, markdown.
+  - Books directory configurable via `BOOKS_DIR`; default
+    `/home/cimi/waver/rsvp-books`.
+- **`config/systemd/waver-rsvp.service`** — mirrors `waver-api.service`
+  style. Runs as root, `Restart=on-failure`, bare `python3 server.py`
+  (no gunicorn — single-user, low-traffic).
+- **`api/app.py`** — added `/api/rsvp/{upload,library,library/<f> (GET+DELETE),status}`.
+  All JWT-authed. Uses `requests` to proxy to converter. Configurable
+  via `RSVP_CONVERTER_URL` (default `http://127.0.0.1:5001`).
+- **`dashboard/`** — new "RSVP Reader" card on `index.html`.
+  Upload form (file + optional title/author), library list with download
+  + delete, status banner. Matched existing dark theme; added rules under
+  `/* RSVP Reader */` block in `style.css`.
+- **`launcher/launcher.py`** — new `RSVP_READER` screen with sub-items
+  `Library` and `Service Status`. Reachable from TOOLS menu. Reuses
+  `draw_wifi_toolkit` rendering (generic menu list).
+- **`launcher/service_manager.py`** — registered `rsvp → waver-rsvp`.
+- **`docs/rsvp-reader.md`** — setup + architecture + endpoints + .rsvp
+  format reference + troubleshooting.
+
+### Key decisions
+1. **Two services, not one.** The converter is its own Flask app on
+   :5001 — separation of concerns, and avoids dragging ebooklib /
+   lxml startup time into the main API worker.
+2. **Loopback only.** Converter binds `127.0.0.1`; only the Waver API
+   talks to it. No new nginx rules, no new attack surface.
+3. **Synchronous Flask, not gunicorn.** Conversions take seconds and
+   the service is single-user. Bare `python3 server.py` keeps the unit
+   simple and matches the "small Pi appliance" philosophy.
+4. **`requests` dependency added to API.** Used to proxy to the
+   converter. Needs `pip install requests` in `waver-env`.
+5. **No web flasher.** Future task — out of scope per spec.
+
+### Setup steps on the Pi
+```bash
+sudo ~/waver-env/bin/pip install -r ~/waver/rsvp-converter/requirements.txt
+sudo ~/waver-env/bin/pip install requests
+sudo mkdir -p /home/cimi/waver/rsvp-books
+sudo cp ~/waver/config/systemd/waver-rsvp.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now waver-rsvp
+sudo systemctl restart waver-api waver
+```
+
+### TODO follow-ups
+- Web flasher for ESP32-S3 firmware OTA (deferred).
+- LCD library browser (currently just shows service status; full
+  library navigation lives on the dashboard).
+- Cover-image extraction from EPUB (rsvpnano doesn't render images yet).
+
+---
+
 ## Files NOT in Repo (stay on Pi only)
 
 - `api/config.py` — contains PASSWORD_HASH and SECRET_KEY

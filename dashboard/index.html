@@ -114,6 +114,24 @@
                     <button class="cancel-btn" onclick="cancelConnect()">Cancel</button>
                 </div>
             </section>
+            <!-- RSVP Reader -->
+            <section class="card" id="rsvp-card">
+                <h2>RSVP Reader</h2>
+                <form id="rsvp-upload-form" class="rsvp-upload">
+                    <input type="file" id="rsvp-file" accept=".epub,.txt,.md,.html,.htm">
+                    <input type="text" id="rsvp-title" placeholder="Title (optional)">
+                    <input type="text" id="rsvp-author" placeholder="Author (optional)">
+                    <button type="submit">Convert &amp; Save</button>
+                </form>
+                <p id="rsvp-status" class="rsvp-status hidden"></p>
+                <div class="rsvp-library">
+                    <div class="rsvp-library-header">
+                        <span>Library</span>
+                        <button class="link-btn-inline" onclick="loadRsvpLibrary()">Refresh</button>
+                    </div>
+                    <div id="rsvp-books"><p class="rsvp-empty">Loading…</p></div>
+                </div>
+            </section>
         </main>
     </div>
 

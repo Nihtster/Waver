@@ -19,10 +19,13 @@ class ServiceManager:
     def __init__(self):
         # Map of friendly name -> systemd service name
         self.services = {
-            "pihole":    "pihole-FTL",
-            "wireguard": "wg-quick@wg0",
-            "ssh":       "ssh",
-            "nginx":     "nginx",
+            "pihole":       "pihole-FTL",
+            "wireguard":    "wg-quick@wg0",
+            "ssh":          "ssh",
+            "nginx":        "nginx",
+            "rsvp":         "waver-rsvp",
+            "usb-storage":  "waver-usb-gadget",
+            "usb-tether":   "waver-usb-tether",
         }
 
     def get_status(self, service_key):
