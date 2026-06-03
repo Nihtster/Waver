@@ -10,6 +10,7 @@ Setup on Pi (one-time):
 REPO_PATH below must point to wherever the repo is cloned on the Pi.
 """
 
+import shutil
 import subprocess
 import os
 import sys
@@ -17,6 +18,10 @@ import sys
 REPO_PATH         = "/home/cimi/waver"
 SERVICES_RESTART  = ["waver", "waver-api", "waver-rsvp"]
 GIT_TIMEOUT       = 30   # seconds per git command
+
+_BASHRC       = "/home/cimi/.bashrc"
+_FF_CONFIG    = "/home/cimi/.config/fastfetch/config.jsonc"
+_FF_MARKER    = "# waver-fastfetch"
 
 
 def _git(*args):
@@ -90,6 +95,56 @@ def do_update():
         return "error", str(e)[:28]
 
 
+def _apt_install(*packages):
+    """Install apt packages. Non-fatal — logs failures to stdout (journald)."""
+    for pkg in packages:
+        r = subprocess.run(
+            ["apt-get", "install", "-y", "-q", pkg],
+            capture_output=True, text=True,
+        )
+        if r.returncode == 0:
+            print(f"[post-update] {pkg} installed.", flush=True)
+        else:
+            print(f"[post-update] apt install {pkg} failed: "
+                  f"{r.stderr.strip()[:80]}", flush=True)
+
+
+def _patch_bashrc():
+    """
+    Idempotent: copy fastfetch config and append Waver aliases + login
+    fastfetch call to /home/cimi/.bashrc. Guarded by _FF_MARKER so
+    repeated OTAs are a no-op.
+    """
+    # Copy fastfetch config from repo → ~/.config/fastfetch/
+    ff_src = os.path.join(REPO_PATH, "config", "fastfetch", "config.jsonc")
+    if os.path.isfile(ff_src):
+        os.makedirs(os.path.dirname(_FF_CONFIG), exist_ok=True)
+        shutil.copy2(ff_src, _FF_CONFIG)
+
+    # Guard: don't patch twice
+    try:
+        with open(_BASHRC) as f:
+            if _FF_MARKER in f.read():
+                return
+    except FileNotFoundError:
+        pass
+
+    patch = (
+        f"\n{_FF_MARKER}\n"
+        f"# Waver terminal aliases\n"
+        f'alias clear=\'clear && fastfetch --config "{_FF_CONFIG}"\'\n'
+        f"alias stats='btop'\n"
+        f"\n"
+        f"# Show Waver system info on every interactive login shell\n"
+        f'if [[ $- == *i* ]]; then\n'
+        f'    fastfetch --config "{_FF_CONFIG}"\n'
+        f"fi\n"
+    )
+    with open(_BASHRC, "a") as f:
+        f.write(patch)
+    print("[post-update] .bashrc patched with Waver aliases.", flush=True)
+
+
 def post_update():
     """
     Idempotent post-pull setup. Safe to run on every update — skips steps
@@ -100,7 +155,8 @@ def post_update():
       2. Copy any new/changed systemd units from the repo into /etc/systemd/system/.
       3. daemon-reload + enable units that aren't already enabled.
       4. Install/upgrade Python deps for the rsvp-converter.
-      5. Run setup-terminal.sh (installs fastfetch + btop, writes .bashrc aliases).
+      5. Install fastfetch + btop via apt.
+      6. Copy fastfetch config + patch .bashrc with aliases.
     """
     VENV_PIP   = "/home/cimi/waver-env/bin/pip"
     UNITS_SRC  = os.path.join(REPO_PATH, "config", "systemd")
@@ -145,13 +201,12 @@ def post_update():
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
 
-    # 5. Terminal setup — fastfetch, btop, .bashrc aliases (idempotent)
-    setup_terminal = os.path.join(REPO_PATH, "config", "scripts", "setup-terminal.sh")
-    if os.path.isfile(setup_terminal):
-        subprocess.run(
-            ["bash", setup_terminal],
-            env={**os.environ, "REPO_DIR": REPO_PATH},
-        )
+    # 5. Install terminal tools directly via apt (no sudo needed — waver
+    #    service runs as root or has CAP_NET_ADMIN; apt just needs root)
+    _apt_install("fastfetch", "btop")
+
+    # 6. Patch .bashrc with fastfetch config + Waver aliases
+    _patch_bashrc()
 
 
 def restart_services():
