@@ -23,6 +23,7 @@ class ServiceManager:
             "wireguard": "wg-quick@wg0",
             "ssh":       "ssh",
             "nginx":     "nginx",
+            "rsvp":      "waver-rsvp",
         }
 
     def get_status(self, service_key):

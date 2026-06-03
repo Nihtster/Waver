@@ -10,6 +10,7 @@ A personal portable toolkit built on a Raspberry Pi Zero 2W. Inspired by devices
 - **Pi-hole** — network-wide DNS ad and tracker blocking
 - **WireGuard VPN** — self-hosted VPN server, usable from any device on the network
 - **WiFi tools** — scan nearby networks, switch connections
+- **RSVP Reader** — convert `.epub`/`.txt`/`.md`/`.html` books into the `.rsvp` format used by the [rsvpnano](https://github.com/ionutdecebal/rsvpnano) ESP32-S3 e-reader
 - **Web dashboard** — full control panel accessible from any browser on the network
 - **OTA updates** — pull the latest code and restart services from the device itself
 
@@ -53,12 +54,17 @@ waver/
 │   ├── index.html           # Web dashboard UI
 │   ├── style.css            # Dark theme styles
 │   └── app.js               # Frontend JS (fetch API, JWT auth)
+├── rsvp-converter/
+│   ├── converter.py         # Book -> .rsvp conversion (epub/txt/md/html)
+│   ├── server.py            # Flask service on 127.0.0.1:5001
+│   └── requirements.txt     # ebooklib, beautifulsoup4, lxml, markdown
 ├── config/
-│   ├── nginx/waver.conf          # nginx reverse proxy config
-│   ├── systemd/waver.service     # LCD launcher systemd unit
-│   ├── systemd/waver-api.service # Flask API systemd unit
-│   ├── wg0.conf.template         # WireGuard config template
-│   └── scripts/                  # One-time setup + runtime helpers
+│   ├── nginx/waver.conf           # nginx reverse proxy config
+│   ├── systemd/waver.service      # LCD launcher systemd unit
+│   ├── systemd/waver-api.service  # Flask API systemd unit
+│   ├── systemd/waver-rsvp.service # RSVP converter systemd unit
+│   ├── wg0.conf.template          # WireGuard config template
+│   └── scripts/                   # One-time setup + runtime helpers
 │       ├── gen-cert.sh           # Self-signed TLS cert generator
 │       ├── setup-hotspot.py      # NetworkManager hotspot profile creator
 │       └── hotspot.sh            # Hotspot start/stop/status
@@ -106,4 +112,5 @@ waver/
 | [Pi-hole](docs/pihole.md) | Install, port config, DNS setup |
 | [WireGuard](docs/wireguard.md) | Install, key generation, peer config |
 | [Hotspot](docs/hotspot.md) | On-device WiFi AP — setup, toggle, troubleshooting |
+| [RSVP Reader](docs/rsvp-reader.md) | Book converter for the rsvpnano ESP32-S3 reader |
 | [Simulator](docs/simulator.md) | Running the local dev simulator on macOS |

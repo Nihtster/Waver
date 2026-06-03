@@ -294,3 +294,134 @@ main {
     background: #2d3748 !important;
     color: #e2e8f0 !important;
 }
+
+/* RSVP Reader */
+#rsvp-card { grid-column: 1 / -1; }
+
+.rsvp-upload {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.rsvp-upload input[type="file"],
+.rsvp-upload input[type="text"] {
+    padding: 8px 10px;
+    background: #0f1117;
+    border: 1px solid #2d3748;
+    border-radius: 6px;
+    color: #e2e8f0;
+    font-size: 0.85rem;
+}
+
+.rsvp-upload button {
+    padding: 8px 16px;
+    background: #3182ce;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.2s;
+}
+
+.rsvp-upload button:hover { background: #2b6cb0; }
+
+.rsvp-status {
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-size: 0.85rem;
+    background: #0f1117;
+    border: 1px solid #2d3748;
+}
+
+.rsvp-status.ok    { color: #9ae6b4; border-color: #22543d; }
+.rsvp-status.error { color: #feb2b2; border-color: #742a2a; }
+
+.rsvp-library-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    color: #718096;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.link-btn-inline {
+    background: transparent;
+    border: 1px solid #2d3748;
+    border-radius: 6px;
+    color: #63b3ed;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.link-btn-inline:hover { background: #2d3748; }
+
+.rsvp-empty {
+    color: #718096;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    background: #0f1117;
+    border-radius: 8px;
+    border: 1px dashed #2d3748;
+}
+
+.rsvp-book {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    background: #0f1117;
+    border: 1px solid #2d3748;
+    border-radius: 8px;
+    margin-bottom: 6px;
+}
+
+.rsvp-book-name {
+    color: #e2e8f0;
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rsvp-book-size {
+    color: #718096;
+    font-size: 0.75rem;
+}
+
+.rsvp-book-dl,
+.rsvp-book-del {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    border: none;
+    text-decoration: none;
+}
+
+.rsvp-book-dl {
+    background: #2d3748;
+    color: #63b3ed;
+}
+
+.rsvp-book-dl:hover { background: #3182ce; color: white; }
+
+.rsvp-book-del {
+    background: transparent;
+    color: #fc8181;
+    border: 1px solid #2d3748;
+}
+
+.rsvp-book-del:hover { border-color: #fc8181; }
+
+@media (max-width: 700px) {
+    .rsvp-upload { grid-template-columns: 1fr; }
+}

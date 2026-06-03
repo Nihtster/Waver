@@ -14,6 +14,7 @@ WIREGUARD   = "wireguard"
 HOTSPOT     = "hotspot"
 WIFI_SCAN   = "wifi_scan"
 WIFI_KIT    = "wifi_toolkit"
+RSVP_READER = "rsvp_reader"
 DASHBOARD   = "dashboard"
 SETTINGS    = "settings"
 UPDATE      = "update"
@@ -70,6 +71,7 @@ class Launcher:
 
         self._tools_items       = self._build_tools_items()
         self._wifi_kit          = ["Scan", "Deauth", "Capture", "Evil Twin"]
+        self._rsvp_items        = ["Library", "Service Status"]
         self._placeholder_title = "Coming Soon"
 
     # ── Main loop ─────────────────────────────────────────────────────────────
@@ -131,6 +133,9 @@ class Launcher:
         elif self.screen == WIFI_KIT:
             self.display.draw_wifi_toolkit(self._wifi_kit, self.selected)
 
+        elif self.screen == RSVP_READER:
+            self.display.draw_wifi_toolkit(self._rsvp_items, self.selected)
+
         elif self.screen == DASHBOARD:
             net = self.get_network()
             self.display.draw_dashboard(
@@ -183,6 +188,8 @@ class Launcher:
             return len(self._tools_items)
         if self.screen == WIFI_KIT:
             return len(self._wifi_kit)
+        if self.screen == RSVP_READER:
+            return len(self._rsvp_items)
         if self.screen == WIFI_SCAN:
             return len(self.get_network().get("wifi_scan", []))
         if self.screen == SETTINGS:
@@ -199,6 +206,7 @@ class Launcher:
                 "Pi-hole":      PIHOLE,
                 "WireGuard":    WIREGUARD,
                 "WiFi Toolkit": WIFI_KIT,
+                "RSVP Reader":  RSVP_READER,
                 "Dashboard":    DASHBOARD,
                 "About":        ABOUT,
                 "Settings":     SETTINGS,
@@ -213,6 +221,17 @@ class Launcher:
             label = self._wifi_kit[self.selected]
             if label == "Scan":
                 self._goto(WIFI_SCAN)
+            else:
+                self._placeholder_title = label
+                self._goto(PLACEHOLDER)
+
+        elif self.screen == RSVP_READER:
+            label = self._rsvp_items[self.selected]
+            if label == "Service Status":
+                status = self._svc("rsvp")
+                line = "Active" if status == "active" else "Off"
+                self.display.draw_status(["RSVP Reader", line])
+                self.input.get_event(timeout=2)
             else:
                 self._placeholder_title = label
                 self._goto(PLACEHOLDER)
@@ -249,7 +268,7 @@ class Launcher:
             return
         if self.screen == HOTSPOT:
             self._goto(SETTINGS)
-        elif self.screen in (PIHOLE, WIREGUARD, WIFI_KIT, ABOUT, DASHBOARD, PLACEHOLDER, SETTINGS):
+        elif self.screen in (PIHOLE, WIREGUARD, WIFI_KIT, RSVP_READER, ABOUT, DASHBOARD, PLACEHOLDER, SETTINGS):
             self._goto(TOOLS)
         elif self.screen == WIFI_SCAN:
             self._goto(WIFI_KIT)
@@ -332,6 +351,7 @@ class Launcher:
             ("Pwnagotchi",   "Off",   GRAY),
             ("WiFi Toolkit", "",      CYAN),
             ("RF Tools",     "",      CYAN),
+            ("RSVP Reader",  "Active" if self._svc("rsvp") == "active" else "Off", CYAN),
             ("Dashboard",    "",      CYAN),
             ("Settings",     "",      CYAN),
             ("About",        "",      CYAN),

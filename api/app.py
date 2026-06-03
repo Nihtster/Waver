@@ -3,7 +3,7 @@
 WAVER Flask API
 """
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, Response, stream_with_context
 from flask_socketio import SocketIO, emit, disconnect
 from flask_cors import CORS
 import jwt
@@ -12,6 +12,7 @@ import subprocess
 import json
 import os
 import time
+import requests
 from datetime import datetime, timedelta
 from config import (
     PASSWORD_HASH, SECRET_KEY,
@@ -19,6 +20,8 @@ from config import (
     WG_INTERFACE, NETWORK_INTERFACE,
 )
 from pihole_client import PiholeClient
+
+RSVP_CONVERTER_URL = os.environ.get("RSVP_CONVERTER_URL", "http://127.0.0.1:5001")
 
 app = Flask(__name__, static_folder='../dashboard')
 app.config['SECRET_KEY'] = SECRET_KEY
@@ -241,6 +244,97 @@ def wireguard_toggle():
     is_active = toggle_service("wg-quick@wg0")
     socketio.emit('service_update', {'service': 'wireguard', 'active': is_active})
     return jsonify({'active': is_active})
+
+# ============ RSVP READER ============
+
+@app.route('/api/rsvp/upload', methods=['POST'])
+def rsvp_upload():
+    if not verify_token(get_auth_token()):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'missing file'}), 400
+
+    f = request.files['file']
+    files = {'file': (f.filename, f.stream, f.mimetype or 'application/octet-stream')}
+    data = {
+        'title':  request.form.get('title', ''),
+        'author': request.form.get('author', ''),
+        'save':   request.form.get('save', '1'),
+    }
+
+    try:
+        r = requests.post(
+            f"{RSVP_CONVERTER_URL}/convert",
+            files=files, data=data, timeout=120,
+        )
+    except requests.RequestException as e:
+        return jsonify({'error': f'converter unreachable: {e}'}), 502
+
+    return Response(
+        r.content,
+        status=r.status_code,
+        content_type=r.headers.get('Content-Type', 'application/octet-stream'),
+        headers={
+            'Content-Disposition': r.headers.get(
+                'Content-Disposition', 'attachment; filename="book.rsvp"'
+            ),
+        },
+    )
+
+@app.route('/api/rsvp/library', methods=['GET'])
+def rsvp_library():
+    if not verify_token(get_auth_token()):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        r = requests.get(f"{RSVP_CONVERTER_URL}/library", timeout=10)
+        return jsonify(r.json()), r.status_code
+    except requests.RequestException as e:
+        return jsonify({'error': f'converter unreachable: {e}'}), 502
+
+@app.route('/api/rsvp/library/<path:filename>', methods=['GET'])
+def rsvp_library_download(filename):
+    if not verify_token(get_auth_token()):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        r = requests.get(
+            f"{RSVP_CONVERTER_URL}/library/{filename}",
+            timeout=30, stream=True,
+        )
+    except requests.RequestException as e:
+        return jsonify({'error': f'converter unreachable: {e}'}), 502
+
+    return Response(
+        r.iter_content(chunk_size=8192),
+        status=r.status_code,
+        content_type=r.headers.get('Content-Type', 'application/octet-stream'),
+        headers={
+            'Content-Disposition': r.headers.get(
+                'Content-Disposition', f'attachment; filename="{filename}"'
+            ),
+        },
+    )
+
+@app.route('/api/rsvp/library/<path:filename>', methods=['DELETE'])
+def rsvp_library_delete(filename):
+    if not verify_token(get_auth_token()):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        r = requests.delete(
+            f"{RSVP_CONVERTER_URL}/library/{filename}", timeout=10,
+        )
+        return jsonify(r.json()), r.status_code
+    except requests.RequestException as e:
+        return jsonify({'error': f'converter unreachable: {e}'}), 502
+
+@app.route('/api/rsvp/status', methods=['GET'])
+def rsvp_status():
+    if not verify_token(get_auth_token()):
+        return jsonify({'error': 'Unauthorized'}), 401
+    return jsonify({
+        'active':   get_service_status("waver-rsvp"),
+        'endpoint': RSVP_CONVERTER_URL,
+    })
 
 # ============ WEBSOCKET ============
 

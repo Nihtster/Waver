@@ -21,6 +21,9 @@ window.onload = () => {
     document.getElementById('password').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') login();
     });
+
+    const rsvpForm = document.getElementById('rsvp-upload-form');
+    if (rsvpForm) rsvpForm.addEventListener('submit', uploadRsvpBook);
 };
 
 async function login() {
@@ -85,7 +88,8 @@ async function loadAll() {
     await Promise.all([
         loadSystemStatus(),
         loadPiholeStats(),
-        loadNetworkInfo()
+        loadNetworkInfo(),
+        loadRsvpLibrary()
     ]);
 }
 
@@ -170,6 +174,126 @@ async function connectWifi() {
     } else {
         alert('Connection failed. Check password and try again.');
     }
+}
+
+function showRsvpStatus(msg, kind) {
+    const el = document.getElementById('rsvp-status');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'rsvp-status ' + (kind || '');
+    el.classList.remove('hidden');
+}
+
+function hideRsvpStatus() {
+    const el = document.getElementById('rsvp-status');
+    if (el) el.classList.add('hidden');
+}
+
+async function uploadRsvpBook(e) {
+    e.preventDefault();
+    const fileEl = document.getElementById('rsvp-file');
+    if (!fileEl.files.length) {
+        showRsvpStatus('Choose a file first.', 'error');
+        return;
+    }
+    const fd = new FormData();
+    fd.append('file', fileEl.files[0]);
+    const title  = document.getElementById('rsvp-title').value;
+    const author = document.getElementById('rsvp-author').value;
+    if (title)  fd.append('title', title);
+    if (author) fd.append('author', author);
+
+    showRsvpStatus('Converting…', '');
+
+    try {
+        const res = await fetch('/api/rsvp/upload', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token },
+            body: fd
+        });
+        if (res.status === 401) { logout(); return; }
+        if (!res.ok) {
+            let msg = 'Conversion failed.';
+            try { const j = await res.json(); if (j.error) msg = j.error; } catch (_) {}
+            showRsvpStatus(msg, 'error');
+            return;
+        }
+        const blob = await res.blob();
+        const disp = res.headers.get('Content-Disposition') || '';
+        const match = disp.match(/filename="?([^";]+)"?/i);
+        const name = match ? match[1] : 'book.rsvp';
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+
+        showRsvpStatus('Saved: ' + name, 'ok');
+        fileEl.value = '';
+        loadRsvpLibrary();
+    } catch (err) {
+        showRsvpStatus('Upload error: ' + err, 'error');
+    }
+}
+
+async function loadRsvpLibrary() {
+    const container = document.getElementById('rsvp-books');
+    if (!container) return;
+    const data = await apiFetch('/api/rsvp/library');
+    if (!data) return;
+    if (data.error) {
+        container.innerHTML = '<p class="rsvp-empty">' + data.error + '</p>';
+        return;
+    }
+    const books = data.books || [];
+    if (books.length === 0) {
+        container.innerHTML = '<p class="rsvp-empty">No books yet.</p>';
+        return;
+    }
+    container.innerHTML = books.map(function(b) {
+        const kb = (b.size / 1024).toFixed(1) + ' KB';
+        const safe = encodeURIComponent(b.filename);
+        return '<div class="rsvp-book">'
+             +   '<span class="rsvp-book-name">' + b.filename + '</span>'
+             +   '<span class="rsvp-book-size">' + kb + '</span>'
+             +   '<a class="rsvp-book-dl" href="/api/rsvp/library/' + safe
+             +       '" onclick="return downloadRsvpBook(event, \'' + safe + '\')">Download</a>'
+             +   '<button class="rsvp-book-del" onclick="deleteRsvpBook(\'' + b.filename.replace(/'/g, "\\'") + '\')">Delete</button>'
+             + '</div>';
+    }).join('');
+}
+
+async function downloadRsvpBook(ev, name) {
+    ev.preventDefault();
+    try {
+        const res = await fetch('/api/rsvp/library/' + name, {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.status === 401) { logout(); return false; }
+        if (!res.ok) { showRsvpStatus('Download failed.', 'error'); return false; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = decodeURIComponent(name);
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        showRsvpStatus('Download error: ' + e, 'error');
+    }
+    return false;
+}
+
+async function deleteRsvpBook(name) {
+    if (!confirm('Delete ' + name + '?')) return;
+    const data = await apiFetch('/api/rsvp/library/' + encodeURIComponent(name), { method: 'DELETE' });
+    if (!data) return;
+    if (data.error) {
+        showRsvpStatus(data.error, 'error');
+        return;
+    }
+    showRsvpStatus('Deleted: ' + name, 'ok');
+    loadRsvpLibrary();
 }
 
 function startAutoRefresh() {
